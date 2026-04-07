@@ -1,0 +1,294 @@
+# 项目：AI 智能拼图画廊（完整可交付版）
+
+## 角色设定
+你是一位拥有 10 年经验的全栈开发专家，精通 Vue 3 生态系统、Supabase 后端架构以及前端图形学处理。你的代码风格严谨、模块化，注重安全性（特别是数据访问控制）和用户体验（移动端适配、错误边界处理）。
+
+## 项目目标
+开发一个名为“AI 智能拼图画廊”的 Web 应用。用户上传图片后，可选择手动标签或调用 AI 自动识别标签；用户可以使用云端模板或自由排版生成拼图海报，并保存作品。
+
+## 技术栈与规范
+- **框架**：Vue 3.4+ (Composition API, `<script setup>`) + Vite + TypeScript
+- **UI 库**：Tailwind CSS (样式), Headless UI (组件), Lucide-Vue (图标)
+- **状态管理**：Pinia (持久化匿名用户 ID)
+- **后端/数据库**：Supabase (Database, Storage) – 仅使用匿名用户，不启用 Auth
+- **核心库**：
+  - `vue-draggable-resizable-gorkys` (拼图编辑，版本锁定 2.4.8)
+  - `html2canvas` (导出海报)
+  - `browser-image-compression` (前端压缩)
+  - `@supabase/supabase-js`
+  - `@vueuse/core` (无限滚动等工具)
+
+## 项目结构（必须生成全部文件）
+src/
+components/
+Gallery/
+UploadZone.vue # 拖拽/点击上传
+ImageCard.vue # 图片卡片（含点赞按钮、标签）
+TagFilter.vue # 标签筛选栏
+Editor/
+TemplateSelector.vue # 模板选择网格
+CanvasArea.vue # 拼图画布（基于 vue-draggable-resizable-gorkys）
+AssetsPanel.vue # 左侧素材库（用户已上传图片）
+Common/
+LoadingSpinner.vue
+ToastNotification.vue # 全局 Toast
+composables/
+useAnonymousId.ts # 生成/读取 localStorage 中的匿名用户ID
+useSupabase.ts # Supabase 客户端（支持 Mock 模式）
+useImageUpload.ts # 压缩 + 上传至 Supabase Storage
+useAITagging.ts # AI 标签生成（Mock 实现，预留真实 API 接口）
+useLikes.ts # 点赞/取消点赞
+useCollage.ts # 拼图保存/加载/导出
+stores/
+gallery.ts # 图片列表、标签筛选、分页状态
+editor.ts # 当前模板、画布元素列表
+lib/
+supabaseClient.ts # 根据环境变量初始化真实或 Mock 客户端
+imageCompression.ts # 封装压缩逻辑
+mockData.ts # Mock 数据加载（图片、模板）
+types/
+index.ts # Image, Template, CollageElement, Like 等类型
+views/
+GalleryView.vue # 主页面（瀑布流 + 无限滚动）
+EditorView.vue # 拼图编辑器页面
+router/
+index.ts # 路由配置（History 模式）
+App.vue
+main.ts
+style.css
+public/
+mock/
+sample1.jpg, sample2.jpg ... # 5-10 张示例图片
+images.json # 假图片数据
+templates/
+white.png
+vintage.png
+preview-white.png
+preview-vintage.png
+.env.example
+.gitignore
+setup-git.sh # Mac/Linux 一键推送脚本
+setup-git.bat # Windows 一键推送脚本
+vercel.json # Vercel 路由配置
+netlify.toml # Netlify 路由配置
+README.md
+package.json
+vite.config.ts
+tsconfig.json
+tailwind.config.js
+postcss.config.js
+supabase/
+migrations/
+init.sql # 数据库表结构及 RLS 策略（简化版）
+
+text
+
+## 数据库设计（`supabase/migrations/init.sql`）
+要求：使用匿名用户 ID（`anonymous_user_id TEXT`），不依赖 Supabase Auth。RLS 策略全部放行（演示环境）或基于 `anonymous_user_id` 简单限制。
+
+```sql
+-- 图片表
+CREATE TABLE images (
+  id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+  url TEXT NOT NULL,
+  tags TEXT[] DEFAULT '{}',
+  likes_count INT DEFAULT 0,
+  anonymous_user_id TEXT NOT NULL,
+  created_at TIMESTAMPTZ DEFAULT NOW()
+);
+
+-- 点赞记录表（防重复）
+CREATE TABLE likes (
+  id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+  image_id UUID REFERENCES images(id) ON DELETE CASCADE,
+  anonymous_user_id TEXT NOT NULL,
+  created_at TIMESTAMPTZ DEFAULT NOW(),
+  UNIQUE(image_id, anonymous_user_id)
+);
+
+-- 拼图作品表
+CREATE TABLE collages (
+  id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+  anonymous_user_id TEXT NOT NULL,
+  template_id INT NOT NULL,
+  elements JSONB NOT NULL,  -- 存储 [{id, x, y, width, height, imageUrl, rotate}]
+  created_at TIMESTAMPTZ DEFAULT NOW()
+);
+
+-- 模板表（预设数据）
+CREATE TABLE templates (
+  id INT PRIMARY KEY,
+  name TEXT NOT NULL,
+  background_url TEXT,
+  preview_url TEXT,
+  config JSONB  -- 保留扩展
+);
+
+-- 插入两条预设模板
+INSERT INTO templates (id, name, background_url, preview_url) VALUES 
+(1, '简约白底', '/mock/template-white.png', '/mock/preview-white.png'),
+(2, '复古相纸', '/mock/template-vintage.png', '/mock/preview-vintage.png');
+
+-- 可选：原子递增函数（用于点赞）
+CREATE OR REPLACE FUNCTION increment_likes(row_id UUID)
+RETURNS VOID AS $$
+BEGIN
+  UPDATE images SET likes_count = likes_count + 1 WHERE id = row_id;
+END;
+$$ LANGUAGE plpgsql;
+
+-- RLS 策略（演示环境全部放行，方便测试）
+ALTER TABLE images ENABLE ROW LEVEL SECURITY;
+CREATE POLICY "公开读取" ON images FOR SELECT USING (true);
+CREATE POLICY "匿名用户可插入" ON images FOR INSERT WITH CHECK (true);
+CREATE POLICY "匿名用户可更新自己的图片" ON images FOR UPDATE USING (anonymous_user_id = current_setting('app.current_anonymous_id', true)::text);
+
+ALTER TABLE likes ENABLE ROW LEVEL SECURITY;
+CREATE POLICY "公开读取" ON likes FOR SELECT USING (true);
+CREATE POLICY "匿名用户可插入" ON likes FOR INSERT WITH CHECK (true);
+
+ALTER TABLE collages ENABLE ROW LEVEL SECURITY;
+CREATE POLICY "公开读取" ON collages FOR SELECT USING (true);
+CREATE POLICY "匿名用户可管理自己的作品" ON collages FOR ALL USING (anonymous_user_id = current_setting('app.current_anonymous_id', true)::text);
+
+ALTER TABLE templates ENABLE ROW LEVEL SECURITY;
+CREATE POLICY "公开读取" ON templates FOR SELECT USING (true);
+核心功能实现细节
+1. 匿名用户 ID
+在 composables/useAnonymousId.ts 中实现：从 localStorage 读取 anonymous_id，若不存在则使用 crypto.randomUUID() 生成并存储。
+
+所有数据库操作（插入 images、likes、collages）都必须附带该 ID。
+
+2. Supabase 客户端与 Mock 模式
+lib/supabaseClient.ts 检测 VITE_USE_MOCK 环境变量：
+
+若为 true，导出一个模拟客户端，其所有 from().select().insert() 等方法操作 public/mock/images.json 等本地文件，并模拟 500ms 延迟。
+
+若为 false，初始化真实 Supabase 客户端。
+
+所有 API 调用必须包含 try-catch，错误通过 Toast 提示。
+
+3. 图片上传与压缩
+composables/useImageUpload.ts：
+
+使用 browser-image-compression，参数：maxSizeMB: 0.5, maxWidthOrHeight: 1200, fileType: "image/webp"。
+
+兜底逻辑：如果压缩失败或文件小于 500KB，返回原始文件。
+
+限制上传前检查文件大小 >5MB 则拦截提示。
+
+上传至 Supabase Storage 桶 gallery-images，路径 {anonymous_id}/{timestamp}_{random}.webp。
+
+获取公开 URL 后，将记录插入 images 表（tags 数组由用户手动选择或 AI 生成）。
+
+4. AI 自动打标签（Mock 实现，可替换）
+composables/useAITagging.ts：
+
+提供 generateTags(imageFile: File): Promise<string[]> 方法。
+
+当前实现：返回固定的预置标签数组（如 ['#风景', '#自然']），模拟异步延迟。
+
+注释中说明可替换为真实 OpenAI / Hugging Face API。
+
+上传组件中，用户可选择“AI 智能识别”按钮调用此函数填充标签输入框。
+
+5. 瀑布流与无限滚动
+views/GalleryView.vue：
+
+使用 CSS Grid (grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-4)。
+
+基于 @vueuse/core 的 useInfiniteScroll 监听滚动到底部，加载下一页（每页 12 条）。
+
+数据从 Pinia gallery store 获取，store 中调用 Supabase 分页查询（range 或 page）。
+
+每张图片使用 ImageCard.vue 组件展示。
+
+6. 标签筛选
+components/Gallery/TagFilter.vue：
+
+从 gallery store 获取所有出现过的不重复标签（聚合查询 select distinct unnest(tags) from images）。
+
+点击标签时，store 触发筛选，调用 Supabase 查询 tags @> ARRAY['标签名']。
+
+提供“清除筛选”按钮。
+
+7. 点赞功能
+composables/useLikes.ts：
+
+toggleLike(imageId) 检查 likes 表是否存在当前匿名用户的记录。
+
+若不存在，插入记录并调用 increment_likes 函数更新 images.likes_count。
+
+前端乐观更新：立即更新 UI 中的点赞数和图标状态。
+
+ImageCard.vue 显示 ❤️ 和数量，点击调用 toggleLike。
+
+8. 拼图编辑器
+views/EditorView.vue 布局：左侧 AssetsPanel（展示用户已上传图片缩略图），右侧 CanvasArea。
+
+CanvasArea 使用 vue-draggable-resizable-gorkys 组件包裹每个图片元素：
+
+支持拖拽移动（边界限制在画布内）。
+
+支持缩放（保持宽高比，最小宽度 50px）。
+
+每个元素右上角有删除按钮。
+
+坐标存储：所有位置 (x, y, width, height) 使用百分比（相对于画布宽高）。
+
+限制画布内最多 9 个元素。
+
+保存拼图：将当前画布元素序列化为 JSON，存入 collages 表（字段 elements）。
+
+加载历史：在编辑器页面提供下拉列表，选择已保存的拼图作品，恢复编辑状态。
+
+9. 海报导出
+在 CanvasArea 中提供“导出为图片”按钮。
+
+调用 html2canvas 渲染画布容器，配置：scale: 2, backgroundColor: null, useCORS: true。
+
+导出后下载为 PNG 文件，文件名 collage-{timestamp}.png。
+
+注意：需在图片元素上设置 crossOrigin="anonymous"，且 Supabase Storage 桶配置 CORS。
+
+10. 路由配置
+createWebHistory() 模式。
+
+路由：/ → GalleryView，/editor → EditorView（接受 query ?templateId=1）。
+
+部署与文档
+README.md 必须包含：
+项目介绍、技术栈。
+
+安全警告（红色粗体）：严禁将真实的 VITE_SUPABASE_ANON_KEY 提交到公共 GitHub 仓库。
+
+本地 Mock 模式开启说明（设置 VITE_USE_MOCK=true）。
+
+环境配置步骤：复制 .env.example 为 .env.local，填写 Supabase 密钥。
+
+安装与运行：npm install && npm run dev。
+
+一键部署按钮（Vercel / Netlify），并说明 {{REPO_URL}} 需替换为实际仓库地址。
+
+Git 自动化脚本
+setup-git.sh (Mac/Linux) 和 setup-git.bat (Windows)：
+
+交互式询问 GitHub 仓库地址。
+
+执行 git init, git add ., git commit -m "Initial commit", git branch -M main, git remote add origin <用户输入>, git push -u origin main。
+
+.gitignore 必须包含：node_modules/, dist/, .env, .env.local, .DS_Store。
+
+部署配置文件
+vercel.json：重写所有路由到 index.html。
+
+netlify.toml：重写规则。
+
+生成要求
+所有代码必须完整、可运行，包含所有 import 和类型定义。
+
+配置文件齐全，依赖版本明确。
+
+代码注释清晰，关键函数说明用途。
+
+错误边界完善，Toast 提示所有异常。
