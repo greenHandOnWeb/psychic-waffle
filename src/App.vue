@@ -113,17 +113,26 @@ import { Dialog, DialogPanel, DialogTitle, TransitionChild, TransitionRoot } fro
 import { CircleHelp } from 'lucide-vue-next';
 import { onMounted, ref } from 'vue';
 import { Toaster, toast } from 'vue-sonner';
-import { ensureMockSession, isSupabaseMockMode } from '@/lib/supabase';
+import {
+  ensureMockSession,
+  ensureSupabaseAuthSession,
+  isSupabaseMockMode,
+} from '@/lib/supabase';
 
 const aboutOpen = ref(false);
 
 onMounted(function appBoot() {
-  if (!isSupabaseMockMode()) {
+  if (isSupabaseMockMode()) {
+    ensureMockSession().catch(function onBootErr(e) {
+      console.error(e);
+      toast.error('Mock 会话初始化失败');
+    });
     return;
   }
-  ensureMockSession().catch(function onBootErr(e) {
-    console.error(e);
-    toast.error('Mock 会话初始化失败');
+  ensureSupabaseAuthSession().catch(function onRealBootErr(e) {
+    console.error('[App] ensureSupabaseAuthSession', e);
+    const msg = e instanceof Error ? e.message : String(e);
+    toast.error(msg, { duration: 12000 });
   });
 });
 </script>

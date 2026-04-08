@@ -101,5 +101,8 @@ export const AUDIO_STORAGE_SUBDIR = 'audio';
 /** 单段背景音乐上传大小上限（20MB） */
 export const MAX_AUDIO_UPLOAD_BYTES = 20 * 1024 * 1024;
 
+/** 导出「海报+音乐」HTML 时，内嵌音频原始字节总和上限（避免单文件过大） */
+export const MAX_HTML_EXPORT_AUDIO_TOTAL_BYTES = 18 * 1024 * 1024;
+
 /** 新建画布默认底色（与 Fabric background 一致） */
 export const EDITOR_DEFAULT_CANVAS_BACKGROUND = '#f8fafc';

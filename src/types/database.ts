@@ -67,10 +67,19 @@ export interface ImageRow {
   file_size_bytes: number | null;
   is_public: boolean;
   created_at: string;
+  /** 点赞数（由 likes 表 / 触发器或 Mock 同步） */
+  likes_count?: number;
   /** single=上传底稿；collage=保存布局生成的成品 */
   gallery_category?: 'single' | 'collage';
   /** 拼团成品对应的源单图 id */
   source_image_id?: string | null;
+}
+
+export interface LikeRow {
+  id: string;
+  image_id: string;
+  user_id: string;
+  created_at: string;
 }
 
 export interface TemplateRow {

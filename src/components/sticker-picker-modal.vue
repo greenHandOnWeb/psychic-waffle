@@ -80,35 +80,36 @@
 
               <div v-else-if="activeTab === 'search'" class="space-y-3">
                 <p
-                  v-if="!giphyReady"
+                  v-if="!pixabayReady"
                   class="rounded border border-amber-800/50 bg-amber-950/40 px-3 py-2 text-xs leading-relaxed text-amber-200"
                 >
-                  未读取到 <code class="text-amber-100">VITE_GIPHY_API_KEY</code>。请在项目根目录的
+                  未读取到 <code class="text-amber-100">VITE_PIXABAY_API_KEY</code>。请在项目根目录的
                   <code class="text-amber-100">.env.development</code>、<code class="text-amber-100">.env</code>
                   或 <code class="text-amber-100">.env.local</code> 中添加一行（勿加引号）：
-                  <code class="mt-1 block break-all text-amber-100">VITE_GIPHY_API_KEY=你的密钥</code>
+                  <code class="mt-1 block break-all text-amber-100">VITE_PIXABAY_API_KEY=你的密钥</code>
                   保存后需<strong>结束当前 dev 进程再重新执行</strong>
-                  <code class="text-amber-100">npm run dev</code>，Vite 才会注入该变量。申请密钥见
+                  <code class="text-amber-100">npm run dev</code>。免费申请见
                   <a
                     class="underline"
-                    href="https://developers.giphy.com/"
+                    href="https://pixabay.com/api/docs/"
                     target="_blank"
                     rel="noopener noreferrer"
-                    >Giphy Developers</a
-                  >。
+                    >Pixabay API</a
+                  >
+                  （插图搜索，适合贴图；结果需遵守 Pixabay 许可说明）。
                 </p>
                 <div class="flex flex-wrap gap-2">
                   <input
                     v-model="searchQuery"
                     type="search"
-                    placeholder="搜索贴纸关键词，如：猫、开心"
+                    placeholder="搜索插图关键词，如：猫、卡通、爱心"
                     class="min-w-[200px] flex-1 rounded border border-slate-700 bg-slate-950 px-3 py-2 text-sm text-white placeholder:text-slate-500"
                     @keydown.enter="runSearch"
                   />
                   <button
                     type="button"
                     class="rounded-lg bg-pink-600 px-4 py-2 text-sm font-medium text-white hover:bg-pink-500 disabled:opacity-50"
-                    :disabled="searchLoading || !giphyReady"
+                    :disabled="searchLoading || !pixabayReady"
                     @click="runSearch"
                   >
                     搜索
@@ -138,7 +139,7 @@
                     />
                   </button>
                 </div>
-                <p v-else-if="giphyReady && searchAttempted" class="text-center text-sm text-slate-500">
+                <p v-else-if="pixabayReady && searchAttempted" class="text-center text-sm text-slate-500">
                   没有结果，换个词试试
                 </p>
               </div>
@@ -187,8 +188,8 @@ import {
   twemojiAssetUrl,
   twemojiHexToEmojiChar,
 } from '@/data/stickers-common';
-import { searchGiphyStickers } from '@/services/giphy-stickers';
-import type { GiphyStickerHit } from '@/services/giphy-stickers';
+import { searchPixabayStickers } from '@/services/pixabay-stickers';
+import type { PixabayStickerHit } from '@/services/pixabay-stickers';
 
 type Tab = 'twemoji' | 'kaomoji' | 'search' | 'local';
 
@@ -215,10 +216,10 @@ const localFileRef = ref<HTMLInputElement | null>(null);
 const searchQuery = ref('');
 const searchLoading = ref(false);
 const searchError = ref('');
-const searchResults = ref<GiphyStickerHit[]>([]);
+const searchResults = ref<PixabayStickerHit[]>([]);
 const searchAttempted = ref(false);
-const giphyReady = computed(function giphyReadyComputed() {
-  const v = import.meta.env.VITE_GIPHY_API_KEY;
+const pixabayReady = computed(function pixabayReadyComputed() {
+  const v = import.meta.env.VITE_PIXABAY_API_KEY;
   return typeof v === 'string' && v.trim().length > 0;
 });
 
@@ -264,7 +265,7 @@ function onLocalFile(ev: Event) {
 }
 
 async function runSearch() {
-  if (!giphyReady.value) {
+  if (!pixabayReady.value) {
     return;
   }
   searchLoading.value = true;
@@ -272,9 +273,9 @@ async function runSearch() {
   searchAttempted.value = true;
   searchResults.value = [];
   try {
-    searchResults.value = await searchGiphyStickers(searchQuery.value, 24);
+    searchResults.value = await searchPixabayStickers(searchQuery.value, 24);
   } catch (e) {
-    console.error('[sticker-picker] giphy', e);
+    console.error('[sticker-picker] pixabay', e);
     searchError.value = e instanceof Error ? e.message : '搜索失败';
   } finally {
     searchLoading.value = false;

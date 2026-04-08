@@ -1,4 +1,4 @@
-import type { ImageRow, ProfileRow, PuzzleLayout, TemplateRow } from '@/types/database';
+import type { ImageRow, LikeRow, ProfileRow, PuzzleLayout, TemplateRow } from '@/types/database';
 import {
   GALLERY_CATEGORY_SINGLE,
   MOCK_NETWORK_DELAY_MS,
@@ -10,9 +10,38 @@ import templatesSeed from '@/mocks/templates-seed.json';
 export interface MockDbSnapshot {
   profiles: ProfileRow[];
   images: ImageRow[];
+  likes: LikeRow[];
   templates: TemplateRow[];
   /** key: `${bucket}/${path}` -> 可访问 URL */
   storagePublicUrls: Record<string, string>;
+}
+
+function normalizeLikesArray(raw: unknown): LikeRow[] {
+  if (!Array.isArray(raw)) {
+    return [];
+  }
+  return raw.map(function mapLike(row: unknown) {
+    const r = row as Record<string, unknown>;
+    return {
+      id: (r.id as string) ?? crypto.randomUUID(),
+      image_id: r.image_id as string,
+      user_id: r.user_id as string,
+      created_at: (r.created_at as string) ?? new Date().toISOString(),
+    };
+  });
+}
+
+function reconcileImageLikeCounts(db: MockDbSnapshot) {
+  for (let i = 0; i < db.images.length; i++) {
+    const id = db.images[i].id;
+    let n = 0;
+    for (let j = 0; j < db.likes.length; j++) {
+      if (db.likes[j].image_id === id) {
+        n++;
+      }
+    }
+    db.images[i] = Object.assign({}, db.images[i], { likes_count: n });
+  }
 }
 
 function loadSnapshot(): MockDbSnapshot {
@@ -28,12 +57,16 @@ function loadSnapshot(): MockDbSnapshot {
     const imgs = (parsed.images ?? []).map(function mapImg(img) {
       return normalizeImageRow(img as unknown as Record<string, unknown>);
     });
-    return {
+    const likes = normalizeLikesArray((parsed as { likes?: unknown }).likes);
+    const snap: MockDbSnapshot = {
       profiles: parsed.profiles ?? [],
       images: imgs,
+      likes,
       templates: parsed.templates?.length ? parsed.templates : seedTemplates(),
       storagePublicUrls: parsed.storagePublicUrls ?? {},
     };
+    reconcileImageLikeCounts(snap);
+    return snap;
   } catch {
     return emptySnapshot();
   }
@@ -43,12 +76,14 @@ function emptySnapshot(): MockDbSnapshot {
   return {
     profiles: [],
     images: [],
+    likes: [],
     templates: seedTemplates(),
     storagePublicUrls: {},
   };
 }
 
 function normalizeImageRow(raw: Record<string, unknown>): ImageRow {
+  const lc = raw.likes_count;
   return {
     id: raw.id as string,
     user_id: raw.user_id as string,
@@ -60,6 +95,7 @@ function normalizeImageRow(raw: Record<string, unknown>): ImageRow {
     file_size_bytes: (raw.file_size_bytes as number | null) ?? null,
     is_public: raw.is_public !== false,
     created_at: (raw.created_at as string) ?? new Date().toISOString(),
+    likes_count: typeof lc === 'number' && Number.isFinite(lc) ? lc : 0,
     gallery_category: (raw.gallery_category as ImageRow['gallery_category']) ?? GALLERY_CATEGORY_SINGLE,
     source_image_id: (raw.source_image_id as string | null) ?? null,
   };
@@ -105,13 +141,15 @@ function err<T>(message: string, code?: string): MockResult<T> {
   return { data: null as T, error: { message, code } };
 }
 
-type Operation = 'select' | 'insert' | 'update' | 'upsert';
+type Operation = 'select' | 'insert' | 'update' | 'upsert' | 'delete';
 
 class MockTableBuilder {
   private readonly table: string;
   private operation: Operation = 'select';
   private payload: unknown[] = [];
-  private filters: Record<string, unknown> = {};
+  private filtersEq: Record<string, unknown> = {};
+  private filtersContains: Record<string, unknown[]> = {};
+  private filtersIn: Record<string, unknown[]> = {};
   private orderColumn: string | null = null;
   private orderAsc = true;
   private wantSingle = false;
@@ -142,8 +180,23 @@ class MockTableBuilder {
     return this;
   }
 
+  delete() {
+    this.operation = 'delete';
+    return this;
+  }
+
   eq(column: string, value: unknown) {
-    this.filters[column] = value;
+    this.filtersEq[column] = value;
+    return this;
+  }
+
+  contains(column: string, value: unknown[]) {
+    this.filtersContains[column] = value;
+    return this;
+  }
+
+  in(column: string, values: unknown[]) {
+    this.filtersIn[column] = values;
     return this;
   }
 
@@ -164,11 +217,40 @@ class MockTableBuilder {
   }
 
   private applyFilters<T extends Record<string, unknown>>(rows: T[]): T[] {
-    const filters = this.filters;
+    const eq = this.filtersEq;
+    const cs = this.filtersContains;
+    const inn = this.filtersIn;
     return rows.filter(function matchFilters(row) {
-      return Object.keys(filters).every(function checkKey(key) {
-        return row[key] === filters[key];
-      });
+      const keysEq = Object.keys(eq);
+      for (let i = 0; i < keysEq.length; i++) {
+        const key = keysEq[i];
+        if (row[key] !== eq[key]) {
+          return false;
+        }
+      }
+      const keysCs = Object.keys(cs);
+      for (let i = 0; i < keysCs.length; i++) {
+        const key = keysCs[i];
+        const need = cs[key];
+        const cell = row[key];
+        if (!Array.isArray(cell)) {
+          return false;
+        }
+        for (let j = 0; j < need.length; j++) {
+          if (!cell.includes(need[j])) {
+            return false;
+          }
+        }
+      }
+      const keysIn = Object.keys(inn);
+      for (let i = 0; i < keysIn.length; i++) {
+        const key = keysIn[i];
+        const allowed = inn[key];
+        if (!allowed.includes(row[key])) {
+          return false;
+        }
+      }
+      return true;
     });
   }
 
@@ -196,6 +278,9 @@ class MockTableBuilder {
     }
     if (this.table === 'images') {
       return this.execImages();
+    }
+    if (this.table === 'likes') {
+      return this.execLikes();
     }
     if (this.table === 'templates') {
       return this.execTemplates();
@@ -266,6 +351,7 @@ class MockTableBuilder {
           file_size_bytes: raw.file_size_bytes ?? null,
           is_public: raw.is_public ?? true,
           created_at: raw.created_at ?? new Date().toISOString(),
+          likes_count: 0,
           gallery_category: raw.gallery_category ?? GALLERY_CATEGORY_SINGLE,
           source_image_id: raw.source_image_id ?? null,
         };
@@ -280,7 +366,7 @@ class MockTableBuilder {
     }
     if (this.operation === 'update') {
       const patch = this.payload[0] as Partial<ImageRow>;
-      const id = this.filters.id as string | undefined;
+      const id = this.filtersEq.id as string | undefined;
       if (!id) {
         return err('update images 需要 eq id');
       }
@@ -298,6 +384,19 @@ class MockTableBuilder {
       return ok(snapshot.images[idx]);
     }
     return err('images: 不支持的操作');
+  }
+
+  private execLikes(): MockResult<unknown> {
+    const list = snapshot.likes;
+    if (this.operation === 'select') {
+      let rows = this.applyFilters(list as unknown as Record<string, unknown>[]);
+      rows = this.sortRows(rows);
+      if (this.wantSingle) {
+        return ok(rows[0] ?? null);
+      }
+      return ok(rows);
+    }
+    return err('likes: Mock 下仅支持 select（点赞请走 RPC toggle_image_like）');
   }
 
   private execTemplates(): MockResult<unknown> {
@@ -393,11 +492,85 @@ class MockAuthApi {
   }
 }
 
+async function executeMockRpc(
+  fn: string,
+  params: Record<string, unknown>
+): Promise<MockResult<unknown>> {
+  await delay();
+  if (fn === 'gallery_distinct_tags') {
+    const set = new Set<string>();
+    for (let i = 0; i < snapshot.images.length; i++) {
+      const img = snapshot.images[i];
+      if (img.is_public !== false) {
+        const tags = img.tags ?? [];
+        for (let j = 0; j < tags.length; j++) {
+          const t = String(tags[j]).trim();
+          if (t) {
+            set.add(t);
+          }
+        }
+      }
+    }
+    const sorted = [...set].sort();
+    const rows = sorted.map(function toTagRow(tag) {
+      return { tag };
+    });
+    return ok(rows);
+  }
+  if (fn === 'toggle_image_like') {
+    const imageId = params.p_image_id as string;
+    const sess = mockGetSession();
+    const uid = sess?.user?.id;
+    if (!uid) {
+      return err('请先登录（Mock：需 ensureMockSession）');
+    }
+    const imgIdx = snapshot.images.findIndex(function byImgId(im) {
+      return im.id === imageId;
+    });
+    if (imgIdx < 0) {
+      return err('图片不存在');
+    }
+    if (snapshot.images[imgIdx].is_public === false) {
+      return err('图片不可访问');
+    }
+    const likeIdx = snapshot.likes.findIndex(function findLikeRow(l) {
+      return l.image_id === imageId && l.user_id === uid;
+    });
+    let nowLiked: boolean;
+    if (likeIdx >= 0) {
+      snapshot.likes.splice(likeIdx, 1);
+      nowLiked = false;
+    } else {
+      const row: LikeRow = {
+        id: crypto.randomUUID(),
+        image_id: imageId,
+        user_id: uid,
+        created_at: new Date().toISOString(),
+      };
+      snapshot.likes.push(row);
+      nowLiked = true;
+    }
+    let cnt = 0;
+    for (let k = 0; k < snapshot.likes.length; k++) {
+      if (snapshot.likes[k].image_id === imageId) {
+        cnt++;
+      }
+    }
+    snapshot.images[imgIdx] = Object.assign({}, snapshot.images[imgIdx], { likes_count: cnt });
+    persistSnapshot(snapshot);
+    return ok({ liked: nowLiked, likes_count: cnt });
+  }
+  return err(`未知 RPC: ${fn}`);
+}
+
 /** 与 supabase-js 子集兼容的 Mock 客户端（经 as unknown as SupabaseClient 导出） */
 export function createSupabaseMockClient() {
   return {
     from(table: string) {
       return new MockTableBuilder(table);
+    },
+    rpc(functionName: string, params?: Record<string, unknown>) {
+      return executeMockRpc(functionName, params ?? {});
     },
     storage: new MockStorageApi(),
     auth: new MockAuthApi(),

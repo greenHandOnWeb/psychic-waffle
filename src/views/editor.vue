@@ -82,10 +82,19 @@
       <button
         type="button"
         class="rounded-lg bg-violet-600 px-4 py-2 text-sm font-medium text-white hover:bg-violet-500 disabled:opacity-50"
-        :disabled="exporting"
+        :disabled="exporting || exportingHtml"
         @click="exportPoster"
       >
         导出海报
+      </button>
+      <button
+        type="button"
+        class="rounded-lg bg-indigo-600 px-4 py-2 text-sm font-medium text-white hover:bg-indigo-500 disabled:opacity-50"
+        :disabled="exporting || exportingHtml"
+        title="下载单个 HTML：内含海报图与按时间轴叠加播放的音频（非 JPG 内嵌，浏览器打开即可播）"
+        @click="exportPosterHtmlWithAudio"
+      >
+        导出 HTML（含音乐）
       </button>
     </div>
 
@@ -420,6 +429,7 @@ import {
   downloadFabricPosterJpeg,
   fabricCanvasToJpegBlob,
 } from '@/utils/export-poster';
+import { downloadFabricPosterWithAudioHtml } from '@/utils/export-poster-html';
 import { useSessionStore } from '@/stores/session';
 
 const route = useRoute();
@@ -438,6 +448,7 @@ const templateSlotElements = ref<LayoutElement[]>([]);
 const galleryPickerOpen = ref(false);
 const saving = ref(false);
 const exporting = ref(false);
+const exportingHtml = ref(false);
 
 const canvasElRef = ref<HTMLCanvasElement | null>(null);
 const canvasHostRef = ref<HTMLElement | null>(null);
@@ -1365,7 +1376,7 @@ async function saveLayout() {
         public_url: collageUrl,
         title,
         tags: ['拼团'],
-        layout: { version: 1, elements: [] },
+        layout,
         file_size_bytes: blob.size,
         is_public: true,
         gallery_category: GALLERY_CATEGORY_COLLAGE,
@@ -1405,6 +1416,29 @@ async function exportPoster() {
     toast.error('导出失败');
   } finally {
     exporting.value = false;
+  }
+}
+
+async function exportPosterHtmlWithAudio() {
+  if (!fabricCanvas) {
+    return;
+  }
+  exportingHtml.value = true;
+  try {
+    if (typeof document !== 'undefined' && document.fonts?.ready) {
+      await document.fonts.ready;
+    }
+    await downloadFabricPosterWithAudioHtml(
+      fabricCanvas,
+      audioSegments.value,
+      `poster-audio-${imageId.value || 'draft'}`
+    );
+    toast.success('已开始下载 HTML（请用浏览器打开；多段音乐会按时间轴叠加播放）');
+  } catch (e) {
+    console.error('[editor] export html+audio', e);
+    toast.error(e instanceof Error ? e.message : '导出 HTML 失败');
+  } finally {
+    exportingHtml.value = false;
   }
 }
 

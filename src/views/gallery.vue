@@ -40,81 +40,22 @@
         </div>
       </div>
 
+      <GalleryTagFilter v-model="selectedTagFilters" class="mb-4" :tags="distinctTags" />
+
       <div v-if="loading" class="text-slate-400">加载中…</div>
       <div
         v-else
         class="columns-1 gap-4 sm:columns-2 lg:columns-3"
         style="column-fill: balance"
       >
-        <article
+        <GalleryImageCard
           v-for="img in images"
           :key="img.id"
-          class="mb-4 break-inside-avoid rounded-lg border border-slate-800 bg-slate-900/80 shadow-lg"
-        >
-          <template v-if="isCollageItem(img)">
-            <div class="relative block">
-              <img
-                v-if="img.public_url"
-                :src="img.public_url"
-                :alt="img.title || '拼团'"
-                class="w-full rounded-t-lg object-cover"
-                loading="lazy"
-              />
-              <div
-                v-else
-                class="flex h-40 items-center justify-center rounded-t-lg bg-slate-800 text-slate-500"
-              >
-                无预览
-              </div>
-              <span
-                class="absolute right-2 top-2 rounded bg-violet-600/95 px-2 py-0.5 text-xs font-medium text-white shadow"
-              >
-                拼团
-              </span>
-            </div>
-            <div class="p-3">
-              <p class="truncate font-medium text-white">{{ img.title || '拼团成品' }}</p>
-              <p class="mt-1 line-clamp-2 text-xs text-slate-400">
-                {{ (img.tags || []).join(' · ') || '栅格拼图导出' }}
-              </p>
-              <RouterLink
-                v-if="img.source_image_id"
-                class="mt-2 inline-block text-sm text-sky-400 hover:text-sky-300"
-                :to="`/editor/${img.source_image_id}`"
-              >
-                继续编辑原稿
-              </RouterLink>
-            </div>
-          </template>
-          <RouterLink v-else :to="`/editor/${img.id}`" class="block">
-            <div class="relative">
-              <img
-                v-if="img.public_url"
-                :src="img.public_url"
-                :alt="img.title || 'gallery'"
-                class="w-full rounded-t-lg object-cover"
-                loading="lazy"
-              />
-              <div
-                v-else
-                class="flex h-40 items-center justify-center rounded-t-lg bg-slate-800 text-slate-500"
-              >
-                无预览
-              </div>
-              <span
-                class="absolute right-2 top-2 rounded bg-sky-600/95 px-2 py-0.5 text-xs font-medium text-white shadow"
-              >
-                单图
-              </span>
-            </div>
-            <div class="p-3">
-              <p class="truncate font-medium text-white">{{ img.title || '未命名' }}</p>
-              <p class="mt-1 line-clamp-2 text-xs text-slate-400">
-                {{ (img.tags || []).join(' · ') || '暂无标签' }}
-              </p>
-            </div>
-          </RouterLink>
-        </article>
+          :image="img"
+          :is-collage="isCollageItem(img)"
+          :liked-by-me="Boolean(likedByMeMap[img.id])"
+          @toggle-like="onToggleLike"
+        />
       </div>
       <p v-if="!loading && !images.length" class="text-slate-500">
         {{ emptyHint }}
@@ -126,7 +67,11 @@
 <script setup lang="ts">
 import { computed, onMounted, ref, watch } from 'vue';
 import { toast } from 'vue-sonner';
-import { supabase } from '@/lib/supabase';
+import GalleryImageCard from '@/components/gallery-image-card.vue';
+import GalleryTagFilter from '@/components/gallery-tag-filter.vue';
+import { fetchGalleryDistinctTags } from '@/composables/useGalleryTags';
+import { toggleImageLikeRpc } from '@/composables/useLikes';
+import { getWriterUserId, supabase } from '@/lib/supabase';
 import {
   GALLERY_CATEGORY_COLLAGE,
   GALLERY_CATEGORY_SINGLE,
@@ -153,6 +98,9 @@ const images = ref<ImageRow[]>([]);
 const loading = ref(true);
 const uploading = ref(false);
 const galleryTab = ref<GalleryTab>('all');
+const distinctTags = ref<string[]>([]);
+const selectedTagFilters = ref<string[]>([]);
+const likedByMeMap = ref<Record<string, boolean>>({});
 const sessionStore = useSessionStore();
 
 function isCollageItem(img: ImageRow): boolean {
@@ -173,6 +121,43 @@ function setGalleryTab(value: GalleryTab) {
   galleryTab.value = value;
 }
 
+async function hydrateLikesForRows(rows: ImageRow[]) {
+  const uid = sessionStore.userId;
+  if (!uid || !rows.length) {
+    likedByMeMap.value = {};
+    return;
+  }
+  const ids = rows.map(function idOf(r) {
+    return r.id;
+  });
+  const { data, error } = await supabase
+    .from('likes')
+    .select('image_id')
+    .eq('user_id', uid)
+    .in('image_id', ids);
+  if (error) {
+    console.error('[gallery] load likes', error);
+    likedByMeMap.value = {};
+    return;
+  }
+  const map: Record<string, boolean> = {};
+  const hitRows = (data ?? []) as { image_id: string }[];
+  for (let i = 0; i < hitRows.length; i++) {
+    map[hitRows[i].image_id] = true;
+  }
+  likedByMeMap.value = map;
+}
+
+async function loadDistinctTags() {
+  try {
+    distinctTags.value = await fetchGalleryDistinctTags();
+  } catch (e) {
+    console.error('[gallery] distinct tags', e);
+    distinctTags.value = [];
+    toast.error(e instanceof Error ? e.message : '加载标签失败');
+  }
+}
+
 async function loadImages() {
   loading.value = true;
   try {
@@ -182,19 +167,66 @@ async function loadImages() {
     } else if (galleryTab.value === 'collage') {
       q = q.eq('gallery_category', GALLERY_CATEGORY_COLLAGE);
     }
+    const tagList = selectedTagFilters.value
+      .map(function trimTag(t) {
+        return t.trim();
+      })
+      .filter(Boolean);
+    if (tagList.length) {
+      q = q.contains('tags', tagList);
+    }
     const { data, error } = await q;
     if (error) {
       console.error('[gallery] load images', error);
       toast.error(error.message || '加载画廊失败');
       return;
     }
-    images.value = (data as ImageRow[]) ?? [];
+    const rows = (data as ImageRow[]) ?? [];
+    images.value = rows;
+    await hydrateLikesForRows(rows);
   } catch (e) {
     console.error('[gallery] load images', e);
     toast.error('加载画廊失败');
   } finally {
     loading.value = false;
   }
+}
+
+async function onToggleLike(img: ImageRow) {
+  const uid = sessionStore.userId;
+  if (!uid) {
+    toast.error('请先等待会话初始化');
+    return;
+  }
+  const prevCount = img.likes_count ?? 0;
+  const prevLiked = Boolean(likedByMeMap.value[img.id]);
+  const optimisticLiked = !prevLiked;
+  const optimisticCount = optimisticLiked ? prevCount + 1 : Math.max(0, prevCount - 1);
+  patchImageLikeState(img.id, optimisticCount, optimisticLiked);
+  try {
+    const res = await toggleImageLikeRpc(img.id);
+    patchImageLikeState(img.id, res.likes_count, res.liked);
+  } catch (e) {
+    patchImageLikeState(img.id, prevCount, prevLiked);
+    console.error('[gallery] toggle like', e);
+    toast.error(e instanceof Error ? e.message : '点赞失败');
+  }
+}
+
+function patchImageLikeState(imageId: string, likesCount: number, liked: boolean) {
+  const idx = images.value.findIndex(function byId(r) {
+    return r.id === imageId;
+  });
+  if (idx >= 0) {
+    images.value[idx] = Object.assign({}, images.value[idx], { likes_count: likesCount });
+  }
+  const next = Object.assign({}, likedByMeMap.value);
+  if (liked) {
+    next[imageId] = true;
+  } else {
+    delete next[imageId];
+  }
+  likedByMeMap.value = next;
 }
 
 async function onPickFile(ev: Event) {
@@ -218,9 +250,11 @@ async function onPickFile(ev: Event) {
 
   uploading.value = true;
   try {
-    const uid = sessionStore.userId;
-    if (!uid) {
-      toast.error('请先等待会话初始化');
+    let uid: string;
+    try {
+      uid = await getWriterUserId();
+    } catch (e) {
+      toast.error(e instanceof Error ? e.message : '会话初始化失败');
       return;
     }
     const compressed = await compressImageForUpload(file);
@@ -280,6 +314,7 @@ async function onPickFile(ev: Event) {
     }
 
     toast.success('上传成功（已归入单图）');
+    await loadDistinctTags();
     await loadImages();
   } catch (e) {
     console.error('[gallery] upload flow', e);
@@ -293,7 +328,15 @@ watch(galleryTab, function onTabChange() {
   loadImages();
 });
 
+watch(
+  selectedTagFilters,
+  function onTagFilterChange() {
+    loadImages();
+  },
+  { deep: true }
+);
+
 onMounted(function galleryMounted() {
-  loadImages();
+  void Promise.all([loadDistinctTags(), loadImages()]);
 });
 </script>
