@@ -82,13 +82,13 @@ npm run dev
 
 应用启动时会自动匿名登录并写入 `profiles`。失败时 **Toast 会显示具体原因**（已加长显示时间），同时请打开浏览器 **F12 → Console** 查看 `[ensureSupabaseAuthSession]` 日志。
 
-| 现象 / Toast 关键词 | 常见原因与处理 |
-| ------------------- | -------------- |
-| 缺少环境变量 `VITE_SUPABASE_URL` | `.env` / `.env.development` 未填或填错；改完后 **必须重启** `npm run dev`。 |
-| `Invalid API key` / `JWT` 相关 | Anon Key 复制不全、混用了 **service_role** key、或项目与 Key 不匹配；到 **Settings → API** 重新复制 **anon public**。 |
-| `Anonymous sign-ins` / `disabled` / 匿名登录失败 | **Authentication → Providers → Anonymous** 未打开 **Enable**；保存后刷新本站。 |
-| `写入 profiles 失败` / RLS / `42501` | 未执行或未完整执行 **`001_init.sql`**（缺 `profiles` 表或策略）；在 SQL Editor 重跑 `001`。 |
-| 网络错误 / `Failed to fetch` | 本机无法访问 Supabase API（代理/防火墙/地区网络）；换网络或检查系统代理。 |
+| 现象 / Toast 关键词                              | 常见原因与处理                                                                                                        |
+| ------------------------------------------------ | --------------------------------------------------------------------------------------------------------------------- |
+| 缺少环境变量 `VITE_SUPABASE_URL`                 | `.env` / `.env.development` 未填或填错；改完后 **必须重启** `npm run dev`。                                           |
+| `Invalid API key` / `JWT` 相关                   | Anon Key 复制不全、混用了 **service_role** key、或项目与 Key 不匹配；到 **Settings → API** 重新复制 **anon public**。 |
+| `Anonymous sign-ins` / `disabled` / 匿名登录失败 | **Authentication → Providers → Anonymous** 未打开 **Enable**；保存后刷新本站。                                        |
+| `写入 profiles 失败` / RLS / `42501`             | 未执行或未完整执行 **`001_init.sql`**（缺 `profiles` 表或策略）；在 SQL Editor 重跑 `001`。                           |
+| 网络错误 / `Failed to fetch`                     | 本机无法访问 Supabase API（代理/防火墙/地区网络）；换网络或检查系统代理。                                             |
 
 一般 **不需要**把账号密码发给他人排查；把 **Toast 全文** 或 **Console 红色报错**（可打码 URL）复制下来即可对照上表。
 
@@ -125,12 +125,12 @@ npm run dev
 
 在 **Vercel / Netlify / 其它 CI** 的「Environment Variables」里新增（名称必须带 `VITE_` 前缀，构建时才会注入）：
 
-| 变量名 | 说明 |
-|--------|------|
-| `VITE_SUPABASE_URL` | Supabase **Settings → API → Project URL** |
-| `VITE_SUPABASE_ANON_KEY` | **anon public** key（勿用 service_role） |
-| `VITE_SUPABASE_MOCK` | 线上填 **`false`**（或未设置，建议在平台显式设为 `false`） |
-| `VITE_PIXABAY_API_KEY` | 可选；不配则表情包仅常用/颜文字/本机 |
+| 变量名                   | 说明                                                       |
+| ------------------------ | ---------------------------------------------------------- |
+| `VITE_SUPABASE_URL`      | Supabase **Settings → API → Project URL**                  |
+| `VITE_SUPABASE_ANON_KEY` | **anon public** key（勿用 service_role）                   |
+| `VITE_SUPABASE_MOCK`     | 线上填 **`false`**（或未设置，建议在平台显式设为 `false`） |
+| `VITE_PIXABAY_API_KEY`   | 可选；不配则表情包仅常用/颜文字/本机                       |
 
 **不要**把上述密钥提交到公开仓库；在托管网站后台配置即可。
 
@@ -138,10 +138,10 @@ npm run dev
 
 在 **Authentication → URL Configuration** 中设置（需在 Supabase 网页里手动保存，无法通过本仓库 SQL 修改）：
 
-| 项 | 本仓库当前线上地址示例 |
-|----|------------------------|
-| **Site URL** | `https://psychic-waffle.vercel.app` |
-| **Redirect URLs** | 点击 **Add URL**，填入 `https://psychic-waffle.vercel.app`（与 Site URL 相同即可满足当前匿名登录 SPA；若以后加重定向登录再按需追加） |
+| 项                | 本仓库当前线上地址示例                                                                                                                    |
+| ----------------- | ----------------------------------------------------------------------------------------------------------------------------------------- |
+| **Site URL**      | `https://psychic-waffle-roan.vercel.app`                                                                                                  |
+| **Redirect URLs** | 点击 **Add URL**，填入 `https://psychic-waffle-roan.vercel.app`（与 Site URL 相同即可满足当前匿名登录 SPA；若以后加重定向登录再按需追加） |
 
 若你使用其它 Vercel 子域名或自定义域，把上表两处改成你的实际 **https 根地址**。匿名登录保持 **已开启**。
 
@@ -201,26 +201,26 @@ npm run build
 
 ## 目录结构（摘要）
 
-| 路径                                  | 说明 |
-| ------------------------------------- | ---- |
-| `supabase/migrations/`                | 表结构、RLS、Storage 策略（含 `002` 画廊分类、`003` 点赞与标签 RPC） |
-| `src/lib/supabase.ts`                 | 真实 / Mock 客户端与 `ensureMockSession` |
-| `src/data.ts`                         | 画布、布局版本、音频与文字等常量 |
-| `src/data/stickers-common.ts`         | 常用 Twemoji / 颜文字数据（可与表情包弹窗配合） |
-| `src/utils/image-compress.ts`         | 压缩与上传大小上限 |
-| `src/utils/audio-timeline.ts`         | 远程音频拉取（CORS）与扩展名辅助 |
-| `src/utils/export-poster.ts`          | Fabric 导出 JPEG / Blob |
-| `src/utils/export-poster-html.ts`     | 导出单文件 HTML（海报 + 内嵌音频时间轴） |
-| `src/services/ai-tags.ts`             | Mock 标签 |
-| `src/services/pixabay-stickers.ts`    | Pixabay 插图搜索（需 `VITE_PIXABAY_API_KEY`） |
-| `src/composables/useLikes.ts`         | 点赞 RPC `toggle_image_like` |
-| `src/composables/useGalleryTags.ts`   | 标签聚合 RPC `gallery_distinct_tags` |
-| `src/components/gallery-tag-filter.vue` | 画廊标签筛选与清除 |
-| `src/components/gallery-image-card.vue` | 画廊卡片（含点赞） |
-| `src/components/gallery-image-picker.vue` | 编辑器内从画廊选图 |
-| `src/components/sticker-picker-modal.vue` | 表情包来源选择弹窗（常用 / 颜文字 / 联网 / 本机） |
-| `src/views/gallery.vue`               | 瀑布流、单图/拼团/标签筛选、点赞、上传 |
-| `src/views/editor.vue`                | Fabric 排版、模板、文字样式、背景、音频、保存/拼团 |
+| 路径                                      | 说明                                                                 |
+| ----------------------------------------- | -------------------------------------------------------------------- |
+| `supabase/migrations/`                    | 表结构、RLS、Storage 策略（含 `002` 画廊分类、`003` 点赞与标签 RPC） |
+| `src/lib/supabase.ts`                     | 真实 / Mock 客户端与 `ensureMockSession`                             |
+| `src/data.ts`                             | 画布、布局版本、音频与文字等常量                                     |
+| `src/data/stickers-common.ts`             | 常用 Twemoji / 颜文字数据（可与表情包弹窗配合）                      |
+| `src/utils/image-compress.ts`             | 压缩与上传大小上限                                                   |
+| `src/utils/audio-timeline.ts`             | 远程音频拉取（CORS）与扩展名辅助                                     |
+| `src/utils/export-poster.ts`              | Fabric 导出 JPEG / Blob                                              |
+| `src/utils/export-poster-html.ts`         | 导出单文件 HTML（海报 + 内嵌音频时间轴）                             |
+| `src/services/ai-tags.ts`                 | Mock 标签                                                            |
+| `src/services/pixabay-stickers.ts`        | Pixabay 插图搜索（需 `VITE_PIXABAY_API_KEY`）                        |
+| `src/composables/useLikes.ts`             | 点赞 RPC `toggle_image_like`                                         |
+| `src/composables/useGalleryTags.ts`       | 标签聚合 RPC `gallery_distinct_tags`                                 |
+| `src/components/gallery-tag-filter.vue`   | 画廊标签筛选与清除                                                   |
+| `src/components/gallery-image-card.vue`   | 画廊卡片（含点赞）                                                   |
+| `src/components/gallery-image-picker.vue` | 编辑器内从画廊选图                                                   |
+| `src/components/sticker-picker-modal.vue` | 表情包来源选择弹窗（常用 / 颜文字 / 联网 / 本机）                    |
+| `src/views/gallery.vue`                   | 瀑布流、单图/拼团/标签筛选、点赞、上传                               |
+| `src/views/editor.vue`                    | Fabric 排版、模板、文字样式、背景、音频、保存/拼团                   |
 
 ## 与 `rule2.txt` 规格说明的关系
 
