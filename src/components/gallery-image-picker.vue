@@ -1,20 +1,21 @@
 <template>
-  <TransitionRoot appear :show="modelValue" as="template">
-    <Dialog class="relative z-50" @close="close">
+  <TransitionRoot appear :show="modelValue" as="div">
+    <Dialog class="fixed inset-0 z-[60]" @close="close">
       <TransitionChild
-        as="template"
+        as="div"
+        class="fixed inset-0 bg-black/60"
+        aria-hidden="true"
         enter="ease-out duration-200"
         enter-from="opacity-0"
         enter-to="opacity-100"
         leave="ease-in duration-150"
         leave-from="opacity-100"
         leave-to="opacity-0"
-      >
-        <div class="fixed inset-0 bg-black/60" aria-hidden="true" />
-      </TransitionChild>
+      />
       <div class="fixed inset-0 flex items-center justify-center p-4">
         <TransitionChild
-          as="template"
+          as="div"
+          class="w-full max-w-2xl"
           enter="ease-out duration-200"
           enter-from="opacity-0 scale-95"
           enter-to="opacity-100 scale-100"
@@ -22,16 +23,20 @@
           leave-from="opacity-100 scale-100"
           leave-to="opacity-0 scale-95"
         >
-          <DialogPanel
-            class="flex max-h-[85vh] w-full max-w-2xl flex-col rounded-xl border border-slate-700 bg-slate-900 shadow-2xl"
-          >
+          <div class="w-full max-w-2xl">
+            <DialogPanel
+              class="flex max-h-[85vh] w-full flex-col rounded-xl border border-slate-700 bg-slate-900 shadow-2xl"
+            >
             <DialogTitle class="border-b border-slate-800 px-4 py-3 text-lg font-semibold text-white">
               从画廊选择图片
             </DialogTitle>
-            <p class="px-4 pt-2 text-xs text-slate-400">
+            <p v-if="!mineOnly" class="px-4 pt-2 text-xs text-slate-400">
               可选<strong class="text-slate-300">我的作品</strong>或<strong class="text-slate-300">公开作品</strong>（需有预览地址）。
             </p>
-            <div class="border-b border-slate-800 px-4 py-2">
+            <p v-else class="px-4 pt-2 text-xs text-slate-400">
+              仅展示<strong class="text-slate-300">我的作品</strong>（导出视频需可绘制到画布）。
+            </p>
+            <div v-if="!mineOnly" class="border-b border-slate-800 px-4 py-2">
               <div class="inline-flex rounded-lg border border-slate-700 bg-slate-950 p-0.5 text-sm">
                 <button
                   v-for="tab in tabs"
@@ -77,7 +82,7 @@
                       v-if="isCollage(img)"
                       class="absolute right-1 top-1 rounded bg-violet-600/95 px-1.5 py-0.5 text-[10px] font-medium text-white"
                     >
-                      拼团
+                      拼图
                     </span>
                     <span
                       v-else
@@ -101,7 +106,8 @@
                 取消
               </button>
             </div>
-          </DialogPanel>
+            </DialogPanel>
+          </div>
         </TransitionChild>
       </div>
     </Dialog>
@@ -124,11 +130,13 @@ type PickerTab = 'mine' | 'public';
 
 const props = defineProps<{
   modelValue: boolean;
+  /** 为 true 时只加载当前用户作品，不展示「公开」标签 */
+  mineOnly?: boolean;
 }>();
 
 const emit = defineEmits<{
   'update:modelValue': [value: boolean];
-  pick: [publicUrl: string];
+  pick: [row: ImageRow];
 }>();
 
 const tabs: { value: PickerTab; label: string }[] = [
@@ -159,7 +167,7 @@ function onPick(img: ImageRow) {
     toast.error('该作品无预览地址，无法插入画布');
     return;
   }
-  emit('pick', img.public_url);
+  emit('pick', img);
   emit('update:modelValue', false);
 }
 
@@ -167,13 +175,14 @@ async function loadItems() {
   loading.value = true;
   items.value = [];
   const uid = sessionStore.userId;
-  if (activeTab.value === 'mine' && !uid) {
+  const tab = props.mineOnly ? 'mine' : activeTab.value;
+  if (tab === 'mine' && !uid) {
     loading.value = false;
     toast.error('请先等待会话初始化');
     return;
   }
   let q = supabase.from('images').select('*').order('created_at', { ascending: false });
-  if (activeTab.value === 'mine') {
+  if (tab === 'mine') {
     q = q.eq('user_id', uid as string);
   } else {
     q = q.eq('is_public', true);

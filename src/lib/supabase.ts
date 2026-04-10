@@ -1,22 +1,85 @@
 import { createClient, type SupabaseClient } from '@supabase/supabase-js';
+import {
+  RUNTIME_SETTINGS_STORAGE_KEY,
+  type RuntimeSupabaseMockMode,
+} from '@/data';
 import { useSessionStore } from '@/stores/session';
 import { createSupabaseMockClient, mockSetSession } from '@/lib/supabase-mock';
-
-const isMock = import.meta.env.VITE_SUPABASE_MOCK === 'true';
 
 const supabaseUrl = import.meta.env.VITE_SUPABASE_URL ?? '';
 const supabaseAnonKey = import.meta.env.VITE_SUPABASE_ANON_KEY ?? '';
 
-export const supabase: SupabaseClient = isMock
-  ? (createSupabaseMockClient() as unknown as SupabaseClient)
-  : createClient(supabaseUrl, supabaseAnonKey);
+const envMockDefault = import.meta.env.VITE_SUPABASE_MOCK === 'true';
+
+function readPersistedMockMode(): RuntimeSupabaseMockMode | null {
+  try {
+    const raw = localStorage.getItem(RUNTIME_SETTINGS_STORAGE_KEY);
+    if (!raw) {
+      return null;
+    }
+    const data = JSON.parse(raw) as Record<string, unknown>;
+    const state = (data.state as Record<string, unknown> | undefined) ?? data;
+    const m = state.supabaseMockMode;
+    if (m === 'mock' || m === 'live' || m === 'inherit') {
+      return m;
+    }
+  } catch {
+    /* ignore */
+  }
+  return null;
+}
+
+function resolveEffectiveMock(): boolean {
+  const mode = readPersistedMockMode();
+  if (mode === 'mock') {
+    return true;
+  }
+  if (mode === 'live') {
+    return false;
+  }
+  return envMockDefault;
+}
+
+let clientInstance: SupabaseClient | null = null;
+let clientWasMock: boolean | null = null;
+
+function getOrCreateClient(): SupabaseClient {
+  const wantMock = resolveEffectiveMock();
+  if (clientInstance !== null && clientWasMock === wantMock) {
+    return clientInstance;
+  }
+  clientInstance = wantMock
+    ? (createSupabaseMockClient() as unknown as SupabaseClient)
+    : createClient(supabaseUrl, supabaseAnonKey);
+  clientWasMock = wantMock;
+  return clientInstance;
+}
+
+/**
+ * 切换 Mock / 远端后调用，再刷新页面，使新客户端与引导逻辑生效。
+ */
+export function invalidateSupabaseClient(): void {
+  clientInstance = null;
+  clientWasMock = null;
+}
+
+export const supabase = new Proxy({} as SupabaseClient, {
+  get(_target, prop, receiver) {
+    const client = getOrCreateClient();
+    const value = Reflect.get(client, prop, receiver);
+    if (typeof value === 'function') {
+      return value.bind(client);
+    }
+    return value;
+  },
+});
 
 /**
  * Mock 模式下确保本地用户与 profiles 行存在，并同步到 Mock Auth 视图。
  * 请在 Pinia 挂载之后调用（例如 App.vue onMounted）。
  */
 export async function ensureMockSession(): Promise<void> {
-  if (!isMock) {
+  if (!isSupabaseMockMode()) {
     return;
   }
   const sessionStore = useSessionStore();
@@ -50,14 +113,14 @@ export async function ensureMockSession(): Promise<void> {
 }
 
 export function isSupabaseMockMode(): boolean {
-  return isMock;
+  return resolveEffectiveMock();
 }
 
 /**
  * 写库 / 上传 Storage 前调用：保证 JWT 与 Pinia 中的 userId 已对齐（避免 RLS 拒绝）。
  */
 export async function getWriterUserId(): Promise<string> {
-  if (isMock) {
+  if (isSupabaseMockMode()) {
     await ensureMockSession();
   } else {
     await ensureSupabaseAuthSession();
@@ -92,7 +155,7 @@ function formatAuthOrDbError(prefix: string, err: unknown): Error {
  * 需在控制台 Authentication → Providers 中开启 **Anonymous sign-ins**。
  */
 export async function ensureSupabaseAuthSession(): Promise<void> {
-  if (isMock) {
+  if (isSupabaseMockMode()) {
     return;
   }
   if (!supabaseUrl || !supabaseAnonKey) {

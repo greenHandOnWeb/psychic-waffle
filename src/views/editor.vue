@@ -5,7 +5,7 @@
       class="rounded border border-amber-800/60 bg-amber-950/40 px-4 py-2 text-sm text-amber-200"
     >
       未关联作品：无法写入数据库。请从<RouterLink class="underline" to="/"> 画廊 </RouterLink
-      >打开某一作品后再保存布局。
+      >打开某一作品，或使用下方「添加图片 → 从画廊选择」选中作品以关联后再保存布局。
     </div>
 
     <div class="flex flex-wrap items-end gap-4">
@@ -68,16 +68,23 @@
           </MenuItems>
         </transition>
       </Menu>
-      <input ref="fileInputRef" type="file" accept="image/*" class="hidden" @change="onImageFile" />
+      <input
+        ref="fileInputRef"
+        type="file"
+        accept="image/*"
+        multiple
+        class="hidden"
+        @change="onImageFile"
+      />
       <GalleryImagePicker v-model="galleryPickerOpen" @pick="onGalleryImagePicked" />
       <button
         type="button"
         class="rounded-lg bg-sky-600 px-4 py-2 text-sm font-medium text-white hover:bg-sky-500 disabled:opacity-50"
         :disabled="saving || !imageId"
-        title="写入当前图层位置到源作品，并导出一张拼团成品到「拼团画廊」"
+        title="写入当前图层位置到源作品，并导出一张拼图成品到「拼图画廊」"
         @click="saveLayout"
       >
-        保存并生成拼团
+        保存并生成拼图
       </button>
       <button
         type="button"
@@ -188,10 +195,20 @@
           v-if="selectedFabricKind === 'image'"
           type="button"
           class="rounded-md bg-indigo-600 px-2.5 py-1.5 font-medium text-white hover:bg-indigo-500 disabled:opacity-50"
-          :disabled="aiBusy"
+          :disabled="aiBusy || removeBgBusy"
           @click="onAiEnhanceSelected"
         >
           AI 优化
+        </button>
+        <button
+          v-if="selectedFabricKind === 'image'"
+          type="button"
+          class="rounded-md bg-teal-600 px-2.5 py-1.5 font-medium text-white hover:bg-teal-500 disabled:opacity-50"
+          :disabled="aiBusy || removeBgBusy"
+          title="浏览器内 AI 抠图，首次使用会下载模型；结果上传到你的存储桶"
+          @click="onRemoveBackgroundSelected"
+        >
+          去背景
         </button>
       </template>
       <span class="text-xs text-slate-500">
@@ -374,7 +391,8 @@
       </div>
     </div>
     <p class="text-xs text-slate-500">
-      切换云端模板时：主图会按槽位顺序对齐到新模板位置（表情包贴纸不参与）；多出的槽补示例图，多出的主图保留原位。文字与背景音乐逻辑不变。
+      选择云端模板时：仅在<strong class="text-slate-400">第一次</strong>选模板时把「当时画布」栅格成一张图再套槽位；切换其它模板仍用这份快照，不会把模板示例图再次合并进去。模板 JSON 的
+      <code class="text-slate-400">layout.background</code>（颜色 / 渐变 / 图片）会应用到画布；仍可用下方「替换画布背景图」覆盖。选回「请选择」会重新从服务器加载作品。
     </p>
   </div>
 </template>
@@ -384,7 +402,7 @@ import { Menu, MenuButton, MenuItem, MenuItems } from '@headlessui/vue';
 import { Canvas, Color, FabricImage, IText } from 'fabric';
 import { computed, nextTick, onBeforeUnmount, onMounted, ref, watch } from 'vue';
 import { ChevronDown } from 'lucide-vue-next';
-import { useRoute } from 'vue-router';
+import { useRoute, useRouter } from 'vue-router';
 import { toast } from 'vue-sonner';
 import GalleryImagePicker from '@/components/gallery-image-picker.vue';
 import StickerPickerModal from '@/components/sticker-picker-modal.vue';
@@ -396,6 +414,7 @@ import {
   EDITOR_DEFAULT_CANVAS_BACKGROUND,
   EDITOR_DEFAULT_NEW_IMAGE_LAYOUT,
   EDITOR_DEFAULT_STICKER_LAYOUT,
+  EDITOR_SINGLE_MAIN_IMAGE_LAYOUT,
   EDITOR_DEFAULT_TEXT_CONTENT,
   EDITOR_DEFAULT_TEXT_FILL,
   EDITOR_DEFAULT_TEXT_FONT_FAMILY,
@@ -406,12 +425,21 @@ import {
   EDITOR_VIEWPORT_MAX_HEIGHT_VH,
   FABRIC_STICKER_NAME_PREFIX,
   FABRIC_TEMPLATE_PLACEHOLDER_PREFIX,
+  EDITOR_TEMPLATE_FLATTEN_SUBDIR,
+  EDITOR_BG_REMOVE_SUBDIR,
+  EDITOR_ROUTE_QUERY_GALLERY_KIND,
+  EDITOR_ROUTE_QUERY_PUZZLE_DRAFT,
   GALLERY_CATEGORY_COLLAGE,
+  GALLERY_CATEGORY_SINGLE,
   LAYOUT_SCHEMA_VERSION,
   MAX_AUDIO_UPLOAD_BYTES,
   STORAGE_BUCKET,
 } from '@/data';
 import { mockAiEnhanceFabricImage } from '@/services/ai-image-enhance';
+import {
+  exportRasterFabricImageToPngBlob,
+  runImglyRemoveBackground,
+} from '@/services/remove-image-background';
 import type {
   AudioTimelineSegment,
   ImageRow,
@@ -420,6 +448,13 @@ import type {
   PuzzleLayout,
   TemplateRow,
 } from '@/types/database';
+import templatesSeedJson from '@/mocks/templates-seed.json';
+import {
+  fetchRemoteTemplatesCatalogAt,
+  mergeTemplateCatalogs,
+  resolveTemplatesCatalogUrl,
+  shouldToastOnCatalogFetchFailure,
+} from '@/services/remote-templates-catalog';
 import {
   extensionFromAudioMime,
   fetchAudioBlobFromUrl,
@@ -430,10 +465,13 @@ import {
   fabricCanvasToJpegBlob,
 } from '@/utils/export-poster';
 import { downloadFabricPosterWithAudioHtml } from '@/utils/export-poster-html';
+import { useRuntimeSettingsStore } from '@/stores/runtime-settings';
 import { useSessionStore } from '@/stores/session';
 
 const route = useRoute();
+const router = useRouter();
 const sessionStore = useSessionStore();
+const runtimeSettings = useRuntimeSettingsStore();
 const imageId = computed(function imageIdComputed() {
   return (route.params.id as string) || '';
 });
@@ -456,6 +494,7 @@ const fileInputRef = ref<HTMLInputElement | null>(null);
 const stickerPickerOpen = ref(false);
 const backgroundImageInputRef = ref<HTMLInputElement | null>(null);
 const aiBusy = ref(false);
+const removeBgBusy = ref(false);
 /** none | template = 不展示操作条；模板示例图一般不操作 */
 const selectedFabricKind = ref<'none' | 'image' | 'sticker' | 'text' | 'template'>('none');
 const uiCanvasBackgroundHex = ref(EDITOR_DEFAULT_CANVAS_BACKGROUND);
@@ -471,6 +510,18 @@ const audioPreviewElements: HTMLAudioElement[] = [];
 
 let fabricCanvas: Canvas | null = null;
 let canvasResizeObserver: ResizeObserver | null = null;
+/** 避免快速切换作品时异步 layout 互相覆盖 */
+let layoutLoadGeneration = 0;
+/** 选择云端模板时栅格化产生的 blob URL，需在替换或重新加载作品后 revoke */
+/** 首次选择云端模板前画布快照（仅合并用户拼图，切换模板不重复合并模板示例图） */
+let preTemplateCompositeBlobUrl: string | null = null;
+
+function revokePreTemplateCompositeUrl(): void {
+  if (preTemplateCompositeBlobUrl) {
+    URL.revokeObjectURL(preTemplateCompositeBlobUrl);
+    preTemplateCompositeBlobUrl = null;
+  }
+}
 
 const showSelectionBar = computed(function showSelectionBarComputed() {
   const k = selectedFabricKind.value;
@@ -673,8 +724,21 @@ function rotateSelected(deltaDeg: number) {
   fabricCanvas.requestRenderAll();
 }
 
+async function uploadNoBgPngToStorage(uid: string, blob: Blob): Promise<string> {
+  const path = `${uid}/${EDITOR_BG_REMOVE_SUBDIR}/${Date.now()}-nobg.png`;
+  const { error: upErr } = await supabase.storage.from(STORAGE_BUCKET).upload(path, blob, {
+    upsert: true,
+    contentType: 'image/png',
+  });
+  if (upErr) {
+    throw new Error(upErr.message || '上传去背景图失败');
+  }
+  const { data: pub } = supabase.storage.from(STORAGE_BUCKET).getPublicUrl(path);
+  return pub.publicUrl;
+}
+
 async function onAiEnhanceSelected() {
-  if (!fabricCanvas || aiBusy.value) {
+  if (!fabricCanvas || aiBusy.value || removeBgBusy.value) {
     return;
   }
   const o = fabricCanvas.getActiveObject();
@@ -691,6 +755,64 @@ async function onAiEnhanceSelected() {
     toast.error('AI 优化失败');
   } finally {
     aiBusy.value = false;
+  }
+}
+
+async function onRemoveBackgroundSelected() {
+  if (!fabricCanvas || removeBgBusy.value || aiBusy.value) {
+    return;
+  }
+  const o = fabricCanvas.getActiveObject();
+  if (!(o instanceof FabricImage) || isFabricTemplatePlaceholder(o)) {
+    return;
+  }
+  const uid = sessionStore.userId;
+  if (!uid) {
+    toast.error('请先等待会话初始化');
+    return;
+  }
+  removeBgBusy.value = true;
+  toast.info('正在去背景，首次使用需下载模型，请稍候…');
+  try {
+    const inputBlob = await exportRasterFabricImageToPngBlob(o);
+    const outBlob = await runImglyRemoveBackground(inputBlob);
+    const publicUrl = await uploadNoBgPngToStorage(uid, outBlob);
+    const opts = fabricLoadOptionsForSrc(publicUrl);
+    const newImg = opts
+      ? await FabricImage.fromURL(publicUrl, opts)
+      : await FabricImage.fromURL(publicUrl);
+    const c = o.getCenterPoint();
+    const sw = o.getScaledWidth();
+    const sh = o.getScaledHeight();
+    const nw = newImg.width || 1;
+    const nh = newImg.height || 1;
+    const scale = Math.min(sw / nw, sh / nh);
+    const named = o as unknown as { name?: string };
+    newImg.set({
+      originX: 'center',
+      originY: 'center',
+      left: c.x,
+      top: c.y,
+      scaleX: scale,
+      scaleY: scale,
+      angle: o.angle ?? 0,
+      flipX: o.flipX,
+      flipY: o.flipY,
+      name: named.name,
+    });
+    fabricCanvas.remove(o);
+    fabricCanvas.add(newImg);
+    fabricCanvas.setActiveObject(newImg);
+    newImg.setCoords();
+    fabricCanvas.requestRenderAll();
+    updateSelectionUi();
+    toast.success('已去除背景并上传，保存布局即可持久化');
+  } catch (e) {
+    console.error('[editor] remove background', e);
+    const msg = e instanceof Error ? e.message : '去除背景失败';
+    toast.error(msg);
+  } finally {
+    removeBgBusy.value = false;
   }
 }
 
@@ -1017,15 +1139,152 @@ async function loadTemplatesList() {
       toast.error(error.message || '加载模板失败');
       return;
     }
-    templates.value = (data as TemplateRow[]) ?? [];
+    let rows = (data as TemplateRow[]) ?? [];
+    const catalogUrl = resolveTemplatesCatalogUrl(runtimeSettings.templatesCatalogUrl);
+    try {
+      const remote = await fetchRemoteTemplatesCatalogAt(catalogUrl);
+      if (remote.length) {
+        rows = mergeTemplateCatalogs(rows, remote);
+      }
+    } catch (re) {
+      if (shouldToastOnCatalogFetchFailure(catalogUrl)) {
+        console.warn('[editor] 模板目录加载失败', re);
+        toast.error(
+          re instanceof Error ? `远程模板目录：${re.message}` : '远程模板目录加载失败'
+        );
+      } else {
+        console.debug('[editor] 默认 templates-catalog.json 不可用，已跳过', re);
+      }
+    }
+    // 真实库若未执行种子 SQL 且无远程，select 成功但为空；与 Mock 种子对齐
+    if (rows.length === 0) {
+      rows = templatesSeedJson as unknown as TemplateRow[];
+    }
+    templates.value = rows;
   } catch (e) {
     console.error('[editor] templates', e);
     toast.error('加载模板失败');
   }
 }
 
-async function loadImageLayout(row: ImageRow) {
-  if (!fabricCanvas) {
+function editorRouteQueryString(qKey: string): string {
+  const raw = route.query[qKey];
+  const s = Array.isArray(raw) ? raw[0] : raw;
+  return typeof s === 'string' ? s.trim().toLowerCase() : '';
+}
+
+/**
+ * 仅根据路由 query 决定单图/拼图布局（与画廊入口一致）；不读取 `row.gallery_category`，避免角标与编辑器不一致。
+ * - `puzzleDraft=1|true`：继续编辑原稿，多槽还原（优先于 galleryKind）。
+ * - `galleryKind=collage`：按拼图 layout 打开（如直达拼图成品 id）。
+ * - `galleryKind=single` 或未传：单图主图逻辑。
+ */
+function shouldLoadRowWithCollageLayout(): boolean {
+  const draft = editorRouteQueryString(EDITOR_ROUTE_QUERY_PUZZLE_DRAFT);
+  if (draft === '1' || draft === 'true') {
+    return true;
+  }
+  return editorRouteQueryString(EDITOR_ROUTE_QUERY_GALLERY_KIND) === GALLERY_CATEGORY_COLLAGE;
+}
+
+/** 单图底稿：主图始终用作品预览 public_url + 固定大区，不还原 layout 里多槽；仅还原文字与贴纸 */
+async function loadSingleImageEditorLayout(row: ImageRow, g: number) {
+  if (!fabricCanvas || g !== layoutLoadGeneration) {
+    return;
+  }
+  const layout: PuzzleLayout = row.layout ?? { elements: [] };
+  /** 画廊入口带 galleryKind=single：与列表预览一致，只铺 public_url + 文字，不还原 layout 里曾存的拼图块/误标 sticker */
+  const gallerySingleFromRoute =
+    editorRouteQueryString(EDITOR_ROUTE_QUERY_GALLERY_KIND) === GALLERY_CATEGORY_SINGLE;
+  fabricCanvas.clear();
+  clearCanvasBackgroundImageSilently();
+  audioSegments.value = (layout.audioSegments ?? []).map(function cloneAudioSeg(s) {
+    return Object.assign({}, s);
+  });
+  const bg = layout.backgroundColor ?? EDITOR_DEFAULT_CANVAS_BACKGROUND;
+  fabricCanvas.backgroundColor = bg;
+  uiCanvasBackgroundHex.value = colorToHexForInput(bg);
+
+  const cw = fabricCanvas.getWidth();
+  const ch = fabricCanvas.getHeight();
+  const elements = layout.elements ?? [];
+
+  if (row.public_url) {
+    try {
+      const opts = fabricLoadOptionsForSrc(row.public_url);
+      const img = opts
+        ? await FabricImage.fromURL(row.public_url, opts)
+        : await FabricImage.fromURL(row.public_url);
+      if (g !== layoutLoadGeneration || !fabricCanvas) {
+        return;
+      }
+      const el: LayoutElement = Object.assign({}, EDITOR_SINGLE_MAIN_IMAGE_LAYOUT, {
+        id: crypto.randomUUID(),
+        src: row.public_url,
+        zIndex: 0,
+        rotation: 0,
+      });
+      placeImageFromLayout(img, el, cw, ch);
+      fabricCanvas.add(img);
+    } catch (e) {
+      console.warn('[editor] single public_url', e);
+    }
+  }
+
+  for (let i = 0; i < elements.length; i++) {
+    if (g !== layoutLoadGeneration || !fabricCanvas) {
+      return;
+    }
+    const el = elements[i];
+    const kind = resolveLayoutElementKind(el);
+    if (kind === 'text') {
+      if (el.text == null) {
+        continue;
+      }
+      const t = new IText(el.text, {
+        name: el.id,
+      });
+      placeTextFromLayout(t, el, cw, ch);
+      fabricCanvas.add(t);
+      continue;
+    }
+    if (kind === 'image') {
+      continue;
+    }
+    if (kind === 'sticker' && el.src) {
+      if (gallerySingleFromRoute) {
+        continue;
+      }
+      try {
+        const opts = fabricLoadOptionsForSrc(el.src);
+        const img = opts
+          ? await FabricImage.fromURL(el.src, opts)
+          : await FabricImage.fromURL(el.src);
+        if (g !== layoutLoadGeneration || !fabricCanvas) {
+          return;
+        }
+        placeImageFromLayout(img, el, cw, ch);
+        img.set({ name: FABRIC_STICKER_NAME_PREFIX + el.id });
+        fabricCanvas.add(img);
+      } catch (e) {
+        console.warn('[editor] skip sticker', el.id, e);
+      }
+    }
+  }
+
+  requestAnimationFrame(function rerenderSingle() {
+    if (g !== layoutLoadGeneration) {
+      return;
+    }
+    fabricCanvas?.renderAll();
+    fabricCanvas?.requestRenderAll();
+    syncCanvasDisplayScale();
+  });
+}
+
+/** 拼图成品：若背景图与公开 JPEG 同源（误把整图当背景），则去掉背景并补一层主图 */
+async function loadCollageImageLayout(row: ImageRow, g: number) {
+  if (!fabricCanvas || g !== layoutLoadGeneration) {
     return;
   }
   const layout: PuzzleLayout = row.layout ?? { elements: [] };
@@ -1036,15 +1295,30 @@ async function loadImageLayout(row: ImageRow) {
   const bg = layout.backgroundColor ?? EDITOR_DEFAULT_CANVAS_BACKGROUND;
   fabricCanvas.backgroundColor = bg;
   uiCanvasBackgroundHex.value = colorToHexForInput(bg);
-  if (layout.backgroundImageSrc) {
+
+  const pub = row.public_url ?? '';
+  const bgSrc = layout.backgroundImageSrc ?? '';
+  const stripDuplicateBg =
+    Boolean(pub && bgSrc) &&
+    (bgSrc === pub || bgSrc.split('?')[0] === pub.split('?')[0]);
+
+  if (layout.backgroundImageSrc && !stripDuplicateBg) {
     await setCanvasBackgroundImageFromSrc(layout.backgroundImageSrc);
   } else {
     clearCanvasBackgroundImageSilently();
   }
+  if (g !== layoutLoadGeneration || !fabricCanvas) {
+    return;
+  }
+
   const cw = fabricCanvas.getWidth();
   const ch = fabricCanvas.getHeight();
   const elements = layout.elements ?? [];
+  let rasterImageCount = 0;
   for (const el of elements) {
+    if (g !== layoutLoadGeneration || !fabricCanvas) {
+      return;
+    }
     const kind = resolveLayoutElementKind(el);
     if (kind === 'text') {
       if (el.text == null) {
@@ -1065,44 +1339,247 @@ async function loadImageLayout(row: ImageRow) {
       const img = opts
         ? await FabricImage.fromURL(el.src, opts)
         : await FabricImage.fromURL(el.src);
+      if (g !== layoutLoadGeneration || !fabricCanvas) {
+        return;
+      }
       placeImageFromLayout(img, el, cw, ch);
       if (kind === 'sticker') {
         img.set({ name: FABRIC_STICKER_NAME_PREFIX + el.id });
+      } else if (kind === 'image') {
+        rasterImageCount += 1;
       }
       fabricCanvas.add(img);
     } catch (e) {
       console.warn('[editor] skip element', el.id, e);
     }
   }
-  requestAnimationFrame(function rerenderLayout() {
+
+  if (stripDuplicateBg && rasterImageCount === 0 && pub) {
+    try {
+      const opts = fabricLoadOptionsForSrc(pub);
+      const img = opts
+        ? await FabricImage.fromURL(pub, opts)
+        : await FabricImage.fromURL(pub);
+      if (g !== layoutLoadGeneration || !fabricCanvas) {
+        return;
+      }
+      const el: LayoutElement = Object.assign({}, EDITOR_DEFAULT_NEW_IMAGE_LAYOUT, {
+        id: crypto.randomUUID(),
+        src: pub,
+        zIndex: 0,
+        rotation: 0,
+      });
+      placeImageFromLayout(img, el, cw, ch);
+      fabricCanvas.add(img);
+    } catch (e) {
+      console.warn('[editor] collage fallback main', e);
+    }
+  }
+
+  requestAnimationFrame(function rerenderCollage() {
+    if (g !== layoutLoadGeneration) {
+      return;
+    }
     fabricCanvas?.renderAll();
     fabricCanvas?.requestRenderAll();
     syncCanvasDisplayScale();
   });
 }
 
+async function loadImageLayout(row: ImageRow, g: number) {
+  if (!fabricCanvas || g !== layoutLoadGeneration) {
+    return;
+  }
+  selectedTemplateId.value = '';
+  templateSlotElements.value = [];
+  if (shouldLoadRowWithCollageLayout()) {
+    await loadCollageImageLayout(row, g);
+  } else {
+    await loadSingleImageEditorLayout(row, g);
+  }
+  if (g === layoutLoadGeneration) {
+    revokePreTemplateCompositeUrl();
+  }
+}
+
+async function uploadFlattenedTemplateCanvas(uid: string, blob: Blob): Promise<string> {
+  const path = `${uid}/${EDITOR_TEMPLATE_FLATTEN_SUBDIR}/${Date.now()}-flat.jpg`;
+  const { error: upErr } = await supabase.storage
+    .from(STORAGE_BUCKET)
+    .upload(path, blob, {
+      upsert: true,
+      contentType: 'image/jpeg',
+    });
+  if (upErr) {
+    throw new Error(upErr.message || '合成图上传失败');
+  }
+  const { data: pub } = supabase.storage.from(STORAGE_BUCKET).getPublicUrl(path);
+  return pub.publicUrl;
+}
+
+/** 套用云端模板后（下拉仍选模板或曾套用且槽位信息未清）：保存前整幅压成一格主图 */
+async function flattenFabricCanvasIfCloudTemplateSelected(uid: string): Promise<void> {
+  const shouldFlatten =
+    Boolean(selectedTemplateId.value) || templateSlotElements.value.length > 0;
+  if (!fabricCanvas || !shouldFlatten) {
+    return;
+  }
+  const bgStr = canvasBackgroundToCssString(fabricCanvas);
+  const blob = await fabricCanvasToJpegBlob(fabricCanvas);
+  const flatUrl = await uploadFlattenedTemplateCanvas(uid, blob);
+  fabricCanvas.clear();
+  revokePreTemplateCompositeUrl();
+  clearCanvasBackgroundImageSilently();
+  fabricCanvas.backgroundColor = bgStr;
+  uiCanvasBackgroundHex.value = colorToHexForInput(bgStr);
+  const cw = fabricCanvas.getWidth();
+  const ch = fabricCanvas.getHeight();
+  const slotEl: LayoutElement = Object.assign({}, EDITOR_DEFAULT_NEW_IMAGE_LAYOUT, {
+    id: crypto.randomUUID(),
+    src: flatUrl,
+    zIndex: 0,
+    rotation: 0,
+  });
+  const opts = fabricLoadOptionsForSrc(flatUrl);
+  const img = opts
+    ? await FabricImage.fromURL(flatUrl, opts)
+    : await FabricImage.fromURL(flatUrl);
+  placeImageFromLayout(img, slotEl, cw, ch);
+  fabricCanvas.add(img);
+  selectedTemplateId.value = '';
+  templateSlotElements.value = [];
+}
+
 async function loadCurrentImage() {
   if (!imageId.value || !fabricCanvas) {
     return;
   }
+  const g = ++layoutLoadGeneration;
   try {
     const { data, error } = await supabase
       .from('images')
       .select('*')
       .eq('id', imageId.value)
       .single();
+    if (g !== layoutLoadGeneration) {
+      return;
+    }
     if (error) {
       console.error('[editor] load image', error);
       toast.error(error.message || '加载作品失败');
       return;
     }
     const row = data as ImageRow;
-    selectedTemplateId.value = '';
-    templateSlotElements.value = [];
-    await loadImageLayout(row);
+    await loadImageLayout(row, g);
   } catch (e) {
     console.error('[editor] load image', e);
     toast.error('加载作品失败');
+  }
+}
+
+/** 选择云端模板前：用「首次选模板前」快照栅格成一张主图，切换模板不重复合并模板示例图 */
+async function mergeEntireCanvasToSingleRasterLayer(): Promise<void> {
+  if (!fabricCanvas) {
+    return;
+  }
+  const c = fabricCanvas;
+  if (!preTemplateCompositeBlobUrl) {
+    const hasContent =
+      Boolean(c.backgroundImage) ||
+      c.getObjects().some(function hasVisual(o) {
+        return o instanceof FabricImage || o instanceof IText;
+      });
+    if (!hasContent) {
+      return;
+    }
+    const blob = await fabricCanvasToJpegBlob(c);
+    preTemplateCompositeBlobUrl = URL.createObjectURL(blob);
+  }
+  const url = preTemplateCompositeBlobUrl;
+  const bgStr = canvasBackgroundToCssString(c);
+  c.clear();
+  clearCanvasBackgroundImageSilently();
+  c.backgroundColor = bgStr;
+  uiCanvasBackgroundHex.value = colorToHexForInput(bgStr);
+  const cw = c.getWidth();
+  const ch = c.getHeight();
+  const layoutEl: LayoutElement = Object.assign({}, EDITOR_SINGLE_MAIN_IMAGE_LAYOUT, {
+    id: crypto.randomUUID(),
+    src: url,
+    zIndex: 0,
+    rotation: 0,
+  });
+  const opts = fabricLoadOptionsForSrc(url);
+  const img = opts
+    ? await FabricImage.fromURL(url, opts)
+    : await FabricImage.fromURL(url);
+  placeImageFromLayout(img, layoutEl, cw, ch);
+  c.add(img);
+}
+
+/** 将模板目录中的 CSS 渐变粗解析为两色，栅格成 data URL 作 Fabric 背景图 */
+function catalogGradientToDataUrl(cssGradient: string, w: number, h: number): string {
+  const hexes = cssGradient.match(/#[0-9a-fA-F]{6}\b/gi) ?? ['#ffffff', '#e2e8f0'];
+  const c0 = hexes[0] ?? '#ffffff';
+  const c1 = hexes[1] ?? hexes[0];
+  const oc = document.createElement('canvas');
+  oc.width = Math.max(1, Math.round(w));
+  oc.height = Math.max(1, Math.round(h));
+  const ctx = oc.getContext('2d');
+  if (!ctx) {
+    return '';
+  }
+  const grd = ctx.createLinearGradient(0, oc.height, oc.width, 0);
+  grd.addColorStop(0, c0);
+  grd.addColorStop(1, c1);
+  ctx.fillStyle = grd;
+  ctx.fillRect(0, 0, oc.width, oc.height);
+  return oc.toDataURL('image/jpeg', 0.92);
+}
+
+async function applyCatalogTemplateBackground(tpl: TemplateRow): Promise<void> {
+  if (!fabricCanvas) {
+    return;
+  }
+  const bg = tpl.layout.background;
+  if (!bg || !bg.value) {
+    return;
+  }
+  if (bg.type === 'color') {
+    clearCanvasBackgroundImageSilently();
+    fabricCanvas.backgroundColor = bg.value;
+    uiCanvasBackgroundHex.value = colorToHexForInput(bg.value);
+    fabricCanvas.requestRenderAll();
+    return;
+  }
+  if (bg.type === 'image') {
+    try {
+      await setCanvasBackgroundImageFromSrc(bg.value);
+    } catch (e) {
+      console.warn('[editor] template catalog background image', e);
+      clearCanvasBackgroundImageSilently();
+      fabricCanvas.backgroundColor = EDITOR_DEFAULT_CANVAS_BACKGROUND;
+      toast.error('模板背景图加载失败（多为外链跨域或网络），已使用默认底色');
+    }
+    uiCanvasBackgroundHex.value = colorToHexForInput(canvasBackgroundToCssString(fabricCanvas));
+    fabricCanvas.requestRenderAll();
+    return;
+  }
+  if (bg.type === 'gradient') {
+    const w = fabricCanvas.getWidth();
+    const h = fabricCanvas.getHeight();
+    const dataUrl = catalogGradientToDataUrl(bg.value, w, h);
+    if (dataUrl) {
+      try {
+        await setCanvasBackgroundImageFromSrc(dataUrl);
+      } catch (e) {
+        console.warn('[editor] template catalog background gradient raster', e);
+        clearCanvasBackgroundImageSilently();
+        fabricCanvas.backgroundColor = EDITOR_DEFAULT_CANVAS_BACKGROUND;
+        fabricCanvas.requestRenderAll();
+      }
+    }
+    uiCanvasBackgroundHex.value = colorToHexForInput(canvasBackgroundToCssString(fabricCanvas));
   }
 }
 
@@ -1119,6 +1596,7 @@ async function applyTemplateById(tplId: string) {
   templateSlotElements.value = tpl.layout.elements.map(function copySlot(el) {
     return Object.assign({}, el);
   });
+  await applyCatalogTemplateBackground(tpl);
   removeFabricTemplatePlaceholders();
   const c = fabricCanvas;
   const cw = c.getWidth();
@@ -1166,15 +1644,23 @@ async function applyTemplateById(tplId: string) {
 
 function onTemplateChange() {
   if (!selectedTemplateId.value) {
-    templateSlotElements.value = [];
     removeFabricTemplatePlaceholders();
-    fabricCanvas?.requestRenderAll();
+    revokePreTemplateCompositeUrl();
+    loadCurrentImage().catch(function onReloadErr(e) {
+      console.error(e);
+      toast.error('恢复拼图失败，请重试');
+    });
     return;
   }
-  applyTemplateById(selectedTemplateId.value).catch(function onTplErr(e) {
-    console.error(e);
-    toast.error('套用模板失败');
-  });
+  void (async function applyCloudTemplateWithMerge() {
+    try {
+      await mergeEntireCanvasToSingleRasterLayer();
+      await applyTemplateById(selectedTemplateId.value);
+    } catch (e) {
+      console.error(e);
+      toast.error(e instanceof Error ? e.message : '套用模板失败');
+    }
+  })();
 }
 
 async function ingestImageSources(urls: string[]) {
@@ -1337,6 +1823,7 @@ async function saveLayout() {
   }
   saving.value = true;
   try {
+    await flattenFabricCanvasIfCloudTemplateSelected(uid);
     const layout = serializeLayout(fabricCanvas);
     const { error: upErr } = await supabase
       .from('images')
@@ -1360,13 +1847,13 @@ async function saveLayout() {
       });
     if (upBlobErr) {
       console.error('[editor] collage upload', upBlobErr);
-      toast.error(upBlobErr.message || '拼团图上传失败');
+      toast.error(upBlobErr.message || '拼图成品上传失败');
       return;
     }
 
     const { data: pub } = supabase.storage.from(STORAGE_BUCKET).getPublicUrl(collagePath);
     const collageUrl = pub.publicUrl;
-    const title = `拼团-${new Date().toLocaleString('zh-CN', { hour12: false })}`;
+    const title = `拼图-${new Date().toLocaleString('zh-CN', { hour12: false })}`;
 
     const { error: insErr } = await supabase
       .from('images')
@@ -1375,7 +1862,7 @@ async function saveLayout() {
         storage_path: collagePath,
         public_url: collageUrl,
         title,
-        tags: ['拼团'],
+        tags: ['拼图'],
         layout,
         file_size_bytes: blob.size,
         is_public: true,
@@ -1387,11 +1874,11 @@ async function saveLayout() {
 
     if (insErr) {
       console.error('[editor] collage insert', insErr);
-      toast.error(insErr.message || '拼团记录写入失败');
+      toast.error(insErr.message || '拼图记录写入失败');
       return;
     }
 
-    toast.success('已保存布局，并生成拼团作品（可在画廊「拼团」中查看）');
+    toast.success('已保存布局，并生成拼图作品（可在画廊「拼图」中查看）');
   } catch (e) {
     console.error('[editor] save', e);
     toast.error('保存失败');
@@ -1781,32 +2268,57 @@ function openGalleryPicker() {
   galleryPickerOpen.value = true;
 }
 
-function onGalleryImagePicked(url: string) {
+function editorGalleryKindQueryFromRow(row: ImageRow): typeof GALLERY_CATEGORY_SINGLE | typeof GALLERY_CATEGORY_COLLAGE {
+  const cat = row.gallery_category ?? GALLERY_CATEGORY_SINGLE;
+  return cat === GALLERY_CATEGORY_COLLAGE ? GALLERY_CATEGORY_COLLAGE : GALLERY_CATEGORY_SINGLE;
+}
+
+function onGalleryImagePicked(row: ImageRow) {
+  const url = row.public_url;
+  if (!url) {
+    toast.error('该作品无预览地址');
+    return;
+  }
+  if (!imageId.value) {
+    void router.replace({
+      name: 'editor',
+      params: { id: row.id },
+      query: { [EDITOR_ROUTE_QUERY_GALLERY_KIND]: editorGalleryKindQueryFromRow(row) },
+    });
+    return;
+  }
   ingestImageSources([url]).catch(function onGalleryPickErr(e) {
     console.error('[editor] gallery pick', e);
     toast.error('插入图片失败');
   });
 }
 
+function readFileAsDataUrl(file: File): Promise<string> {
+  return new Promise(function readFilePromise(resolve, reject) {
+    const reader = new FileReader();
+    reader.onload = function onLoad() {
+      resolve(reader.result as string);
+    };
+    reader.onerror = function onError() {
+      reject(reader.error);
+    };
+    reader.readAsDataURL(file);
+  });
+}
+
 async function onImageFile(ev: Event) {
   const input = ev.target as HTMLInputElement;
-  const file = input.files?.[0];
+  const files = Array.from(input.files ?? []);
   input.value = '';
-  if (!file) {
+  if (!files.length) {
     return;
   }
   try {
-    const dataUrl = await new Promise<string>(function readFile(resolve, reject) {
-      const reader = new FileReader();
-      reader.onload = function onLoad() {
-        resolve(reader.result as string);
-      };
-      reader.onerror = function onError() {
-        reject(reader.error);
-      };
-      reader.readAsDataURL(file);
-    });
-    await ingestImageSources([dataUrl]);
+    const dataUrls: string[] = [];
+    for (let i = 0; i < files.length; i++) {
+      dataUrls.push(await readFileAsDataUrl(files[i]));
+    }
+    await ingestImageSources(dataUrls);
   } catch (e) {
     console.error('[editor] add image', e);
     toast.error('添加图片失败');
@@ -1855,15 +2367,21 @@ onMounted(function editorMounted() {
   });
 });
 
-watch(imageId, function onImageIdChange() {
-  nextTick(function afterIdChange() {
-    initFabricIfNeeded();
-    loadCurrentImage().catch(function noop() {});
-  });
-});
+watch(
+  function editorRouteLoadKey() {
+    return `${imageId.value}\0${editorRouteQueryString(EDITOR_ROUTE_QUERY_PUZZLE_DRAFT)}\0${editorRouteQueryString(EDITOR_ROUTE_QUERY_GALLERY_KIND)}`;
+  },
+  function onEditorRouteLoadKeyChange() {
+    nextTick(function afterRouteLoadKeyChange() {
+      initFabricIfNeeded();
+      loadCurrentImage().catch(function noop() {});
+    });
+  },
+);
 
 onBeforeUnmount(function editorUnmount() {
   stopTimelinePreview();
+  revokePreTemplateCompositeUrl();
   window.removeEventListener('keydown', onEditorKeydown);
   window.removeEventListener('resize', onWindowResize);
   if (canvasResizeObserver) {

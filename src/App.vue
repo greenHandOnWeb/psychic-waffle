@@ -8,7 +8,7 @@
           to="/"
           class="text-lg font-semibold text-white hover:text-sky-400"
         >
-          AI 智能拼图画廊
+          灵动画册
         </RouterLink>
         <nav class="flex items-center gap-3 text-sm">
           <RouterLink
@@ -24,6 +24,13 @@
             active-class="!bg-slate-800 !text-white"
           >
             拼图编辑
+          </RouterLink>
+          <RouterLink
+            to="/settings"
+            class="rounded px-2 py-1 text-slate-300 hover:bg-slate-800 hover:text-white"
+            active-class="!bg-slate-800 !text-white"
+          >
+            设置
           </RouterLink>
           <button
             type="button"
@@ -43,37 +50,28 @@
     <main class="mx-auto w-full max-w-6xl flex-1 px-4 py-6">
       <RouterView />
     </main>
-    <Toaster
-      position="top-center"
-      rich-colors
-    />
+    <AppToaster />
 
-    <TransitionRoot
-      appear
-      :show="aboutOpen"
-      as="template"
-    >
+    <TransitionRoot appear :show="aboutOpen" as="div" class="contents">
       <Dialog
         class="relative z-50"
         @close="aboutOpen = false"
       >
         <TransitionChild
-          as="template"
+          as="div"
+          class="fixed inset-0 bg-black/60"
+          aria-hidden="true"
           enter="ease-out duration-200"
           enter-from="opacity-0"
           enter-to="opacity-100"
           leave="ease-in duration-150"
           leave-from="opacity-100"
           leave-to="opacity-0"
-        >
-          <div
-            class="fixed inset-0 bg-black/60"
-            aria-hidden="true"
-          />
-        </TransitionChild>
+        />
         <div class="fixed inset-0 flex items-center justify-center p-4">
           <TransitionChild
-            as="template"
+            as="div"
+            class="w-full max-w-md"
             enter="ease-out duration-200"
             enter-from="opacity-0 scale-95"
             enter-to="opacity-100 scale-100"
@@ -81,11 +79,12 @@
             leave-from="opacity-100 scale-100"
             leave-to="opacity-0 scale-95"
           >
-            <DialogPanel
-              class="max-w-md rounded-xl border border-slate-700 bg-slate-900 p-6 shadow-2xl"
-            >
+            <div class="w-full max-w-md">
+              <DialogPanel
+                class="w-full rounded-xl border border-slate-700 bg-slate-900 p-6 shadow-2xl"
+              >
               <DialogTitle class="text-lg font-semibold text-white">
-                关于 AI 智能拼图画廊
+                关于灵动画册
               </DialogTitle>
               <p class="mt-3 text-sm leading-relaxed text-slate-300">
                 上传图片、Mock
@@ -100,7 +99,8 @@
               >
                 关闭
               </button>
-            </DialogPanel>
+              </DialogPanel>
+            </div>
           </TransitionChild>
         </div>
       </Dialog>
@@ -110,9 +110,10 @@
 
 <script setup lang="ts">
 import { Dialog, DialogPanel, DialogTitle, TransitionChild, TransitionRoot } from '@headlessui/vue';
+import AppToaster from '@/components/app-toaster.vue';
 import { CircleHelp } from 'lucide-vue-next';
 import { onMounted, ref } from 'vue';
-import { Toaster, toast } from 'vue-sonner';
+import { toast } from 'vue-sonner';
 import {
   ensureMockSession,
   ensureSupabaseAuthSession,

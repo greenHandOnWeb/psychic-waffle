@@ -1,5 +1,36 @@
 /** 全局常量（业务魔法数字集中管理） */
 
+/** 未配置 `VITE_TEMPLATES_CATALOG_URL` 时，默认从站点根路径加载的模板目录（见 `public/templates-catalog.json`） */
+export const DEFAULT_TEMPLATES_CATALOG_PATH = '/templates-catalog.json';
+
+/** 与 `useRuntimeSettingsStore` 的 pinia 持久化 key 一致（供 supabase 启动时读取本地覆盖） */
+export const RUNTIME_SETTINGS_STORAGE_KEY = 'psychic-waffle-runtime-settings';
+
+/** 设置页：Supabase 数据源；存于 localStorage，覆盖构建时 VITE_SUPABASE_MOCK */
+export type RuntimeSupabaseMockMode = 'inherit' | 'mock' | 'live';
+
+export const RUNTIME_SUPABASE_MOCK_MODE_OPTIONS: {
+  value: RuntimeSupabaseMockMode;
+  label: string;
+  description: string;
+}[] = [
+  {
+    value: 'inherit',
+    label: '跟随构建配置',
+    description: '使用 .env 中 VITE_SUPABASE_MOCK（true 为 Mock）',
+  },
+  {
+    value: 'mock',
+    label: '强制本地 Mock',
+    description: '内存 + localStorage 模拟数据，不连网',
+  },
+  {
+    value: 'live',
+    label: '强制远端 Supabase',
+    description: '需已配置 VITE_SUPABASE_URL 与 VITE_SUPABASE_ANON_KEY',
+  },
+];
+
 export const STORAGE_BUCKET = 'gallery-images';
 
 /** Mock 模式下模拟网络延迟（毫秒） */
@@ -31,10 +62,21 @@ export const MOCK_STORAGE_KEY = 'psychic-waffle-mock-db';
 /** 画廊：用户上传、可进编辑器的底稿 */
 export const GALLERY_CATEGORY_SINGLE = 'single' as const;
 
-/** 画廊：保存布局时导出的拼团成品（栅格 JPEG） */
+/** 画廊：保存布局时导出的拼图成品（栅格 JPEG） */
 export const GALLERY_CATEGORY_COLLAGE = 'collage' as const;
 
 export type GalleryCategory = typeof GALLERY_CATEGORY_SINGLE | typeof GALLERY_CATEGORY_COLLAGE;
+
+/**
+ * 路由 query 键：与画廊卡片角标一致，决定编辑器用单图主图逻辑还是拼图多槽还原（**不读库字段**，避免列表与编辑器不一致）。
+ * 取值同 `GALLERY_CATEGORY_*`：`single` | `collage`。
+ */
+export const EDITOR_ROUTE_QUERY_GALLERY_KIND = 'galleryKind';
+
+/**
+ * 路由 query 键：从拼图卡片「继续编辑原稿」进入底稿时设为 `1`，强制按拼图 layout 多槽还原（与 `galleryKind=single` 可同时出现，以此项优先）。
+ */
+export const EDITOR_ROUTE_QUERY_PUZZLE_DRAFT = 'puzzleDraft';
 
 /** 编辑器画布区最大高度（相对视口），避免外框过高 */
 export const EDITOR_VIEWPORT_MAX_HEIGHT_VH = 72;
@@ -51,6 +93,14 @@ export const EDITOR_DEFAULT_NEW_IMAGE_LAYOUT = {
   yPct: 10,
   wPct: 40,
   hPct: 40,
+} as const;
+
+/** 单图底稿进编辑器时主图区域（忽略 layout 里多槽/拼图坐标，避免仍显示旧拼图槽位） */
+export const EDITOR_SINGLE_MAIN_IMAGE_LAYOUT = {
+  xPct: 5,
+  yPct: 5,
+  wPct: 90,
+  hPct: 90,
 } as const;
 
 /** Fabric `name` 前缀：表情包等小图（序列化时记为 kind: sticker） */
@@ -98,6 +148,15 @@ export const LAYOUT_SCHEMA_VERSION = 3;
 /** 背景音乐存入 Storage 时使用的子目录（完整路径为 `{userId}/audio/...`） */
 export const AUDIO_STORAGE_SUBDIR = 'audio';
 
+/** 套用云端模板后压成单图写入 layout 时的临时 JPEG（`{userId}/editor-template-flat/...`） */
+export const EDITOR_TEMPLATE_FLATTEN_SUBDIR = 'editor-template-flat';
+
+/** 去背景结果 PNG 存入 Storage 的子目录（`{userId}/editor-nobg/...`） */
+export const EDITOR_BG_REMOVE_SUBDIR = 'editor-nobg';
+
+/** 去背景推理前输入最长边上限（像素），控制内存与耗时 */
+export const EDITOR_BG_REMOVE_INPUT_MAX_EDGE = 1024;
+
 /** 单段背景音乐上传大小上限（20MB） */
 export const MAX_AUDIO_UPLOAD_BYTES = 20 * 1024 * 1024;
 
@@ -106,3 +165,53 @@ export const MAX_HTML_EXPORT_AUDIO_TOTAL_BYTES = 18 * 1024 * 1024;
 
 /** 新建画布默认底色（与 Fabric background 一致） */
 export const EDITOR_DEFAULT_CANVAS_BACKGROUND = '#f8fafc';
+
+/** 画廊图片每条记录允许的最大标签数（防止数组过大） */
+export const MAX_IMAGE_TAGS = 40;
+
+/** 画廊作品名称最大字符数 */
+export const IMAGE_TITLE_MAX_LENGTH = 120;
+
+/** 单张删除确认（占位符 {title} 为作品名） */
+export const GALLERY_DELETE_ONE_CONFIRM = '确定删除作品「{title}」？删除后不可恢复。';
+
+/** 批量删除确认（占位符 {n} 为数量） */
+export const GALLERY_DELETE_BATCH_CONFIRM = '确定删除已选的 {n} 张作品？删除后不可恢复。';
+
+/** 画布幻灯导出 WebM：逻辑分辨率（16:9，与预览比例一致、像素更高） */
+export const VIDEO_EXPORT_WIDTH = 1920;
+
+export const VIDEO_EXPORT_HEIGHT = 1080;
+
+/** 弹窗内时间轴预览画布分辨率（16:9，与导出比例一致） */
+export const VIDEO_PREVIEW_CANVAS_WIDTH = 960;
+
+export const VIDEO_PREVIEW_CANVAS_HEIGHT = 540;
+
+/** MediaRecorder 分片间隔（毫秒），避免部分浏览器只产出 0 时长空文件 */
+export const MEDIA_RECORDER_TIMESLICE_MS = 250;
+
+/**
+ * 开始录制后先经过此毫秒再计入首张停留，减轻编码器启动吃掉首段墙钟导致总时长偏短（如 1+3+4 少 1s）。
+ * 该时间仍显示第一张图，并从首张设定秒数内扣除。
+ */
+export const VIDEO_RECORD_ENCODER_WARMUP_MS = 120;
+
+/** 小于此字节的 WebM 视为录制失败 */
+export const MIN_WEBM_EXPORT_BYTES = 512;
+
+/** 画布 captureStream 采样帧率（与每帧停留秒数配合，保证录像流畅） */
+export const VIDEO_CAPTURE_STREAM_FPS = 30;
+
+/** WebM 导出时每段停留期间 requestFrame + 等待的步长（毫秒），墙钟与编码更同步 */
+export const VIDEO_EXPORT_RECORD_TICK_MS = 40;
+
+/** 幻灯每帧默认停留（秒） */
+export const VIDEO_SLIDE_SECONDS_DEFAULT = 1;
+
+export const VIDEO_SLIDE_SECONDS_MIN = 0.5;
+
+export const VIDEO_SLIDE_SECONDS_MAX = 15;
+
+/** Internet Archive 音频搜索每次返回条数上限 */
+export const ARCHIVE_AUDIO_SEARCH_ROWS = 12;

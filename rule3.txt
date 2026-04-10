@@ -1,0 +1,48 @@
+# 任务：为Vue 3项目添加“图片生成视频”功能
+
+## 背景
+为一个Vue 3 + TypeScript + Vite项目添加新功能。项目已有Supabase集成、Pinia状态管理和Tailwind CSS。
+
+## 功能需求
+1.  **新组件**：在`src/components/Gallery/`下创建`GenerateVideoButton.vue`。
+    *   功能：一个可点击的按钮，用于“生成视频”。
+    *   状态：生成视频时显示进度条，并禁用按钮。
+    *   交互：点击按钮时，收集当前画廊中用户“选中”的图片列表。
+    *   结果：视频生成后，弹出一个模态框，内含视频预览和下载按钮。
+2.  **新Composable**：在`src/composables/`下创建`useVideoGenerator.ts`。
+    *   封装核心逻辑，暴露`generateVideo(images: Image[], options: VideoOptions)`和`downloadVideo(blob: Blob, filename: string)`方法。
+    *   使用`MediaRecorder` API实现视频生成[reference:8][reference:9]。
+    *   使用`canvas.captureStream(fps)`获取视频流[reference:10]。
+    *   设置帧率为1 FPS，使每张图片显示1秒。
+    *   实现一个清晰的生成流程：开始录制 -> 绘制帧 -> 停止录制 -> 返回Blob。
+3.  **UI集成**：将`GenerateVideoButton`组件集成到现有的`GalleryView.vue`页面中，并确保它能访问到用户选择的图片列表。
+
+## 技术规范
+*   **框架**: Vue 3 Composition API (`<script setup>`)
+*   **语言**: TypeScript (提供完整的类型定义)
+*   **样式**: Tailwind CSS
+*   **错误处理**: 所有异步操作都应有`try-catch`块，错误信息通过Toast提示（可集成`vue3-toastify`，若无则用`console.error`并预留接口）。
+*   **用户反馈**：视频生成过程中需有进度提示（如“正在处理第X/Y张图片...”）。
+
+## 代码生成要求
+1.  **生成文件**：
+    *   `src/components/Gallery/GenerateVideoButton.vue`
+    *   `src/composables/useVideoGenerator.ts`
+2.  **类型定义**：在生成的文件中或现有`src/types/index.ts`中补充必要的`Image`和`VideoOptions`类型。
+3.  **代码注释**：关键函数和复杂逻辑需有清晰注释，特别是`MediaRecorder`的事件处理和Canvas绘制部分。
+4.  **实现提示**：
+    *   `canvas.captureStream()`的帧率建议设为1，使每张图片在视频中停留1秒。
+    *   确保Canvas尺寸与图片比例协调，可选择固定宽高（如`1280x720`）并居中绘制，或使用第一张图片的尺寸作为基准。
+    *   对于`MediaRecorder`，使用`video/webm`作为MIME类型。
+
+## 使用示例
+组件在页面中的使用方式大致如下：
+```vue
+<template>
+  <GenerateVideoButton :selected-images="selectedImages" />
+</template>
+<script setup>
+import GenerateVideoButton from '@/components/Gallery/GenerateVideoButton.vue';
+import { ref } from 'vue';
+const selectedImages = ref([]);
+</script>

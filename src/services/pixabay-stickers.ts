@@ -7,13 +7,22 @@ export interface PixabayStickerHit {
   title: string;
 }
 
-function readPixabayApiKey(): string {
+function readEnvPixabayApiKey(): string {
   const k = import.meta.env.VITE_PIXABAY_API_KEY;
   return typeof k === 'string' ? k.trim() : '';
 }
 
-export function isPixabayStickerSearchConfigured(): boolean {
-  return readPixabayApiKey().length > 0;
+/** 设置页覆盖优先于 .env */
+export function resolvePixabayApiKey(settingsOverride: string): string {
+  const o = (settingsOverride || '').trim();
+  if (o.length > 0) {
+    return o;
+  }
+  return readEnvPixabayApiKey();
+}
+
+export function isPixabayStickerSearchConfigured(settingsOverride?: string): boolean {
+  return resolvePixabayApiKey(settingsOverride ?? '').length > 0;
 }
 
 interface PixabayApiHit {
@@ -31,8 +40,12 @@ interface PixabayApiResponse {
 /**
  * 搜索可用于画布的远程图片（插图为主，更接近「贴纸」用途）
  */
-export async function searchPixabayStickers(query: string, perPage: number): Promise<PixabayStickerHit[]> {
-  const apiKey = readPixabayApiKey();
+export async function searchPixabayStickers(
+  query: string,
+  perPage: number,
+  apiKeyOverride?: string
+): Promise<PixabayStickerHit[]> {
+  const apiKey = resolvePixabayApiKey(apiKeyOverride ?? '');
   if (!apiKey) {
     return [];
   }

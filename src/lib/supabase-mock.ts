@@ -383,6 +383,42 @@ class MockTableBuilder {
       }
       return ok(snapshot.images[idx]);
     }
+    if (this.operation === 'delete') {
+      const ids = this.filtersIn.id as string[] | undefined;
+      const uid = this.filtersEq.user_id as string | undefined;
+      if (!ids || !ids.length || !uid) {
+        return err('delete images 需要 in("id", ids) 与 eq("user_id", uid)');
+      }
+      const idSet = new Set(ids);
+      const deletedIds: string[] = [];
+      const pathsToDrop: string[] = [];
+      for (let i = 0; i < snapshot.images.length; i++) {
+        const img = snapshot.images[i];
+        if (idSet.has(img.id) && img.user_id === uid) {
+          deletedIds.push(img.id);
+          if (img.storage_path) {
+            pathsToDrop.push(img.storage_path);
+          }
+        }
+      }
+      if (!deletedIds.length) {
+        return ok(null);
+      }
+      const delSet = new Set(deletedIds);
+      snapshot.images = snapshot.images.filter(function keepImg(img) {
+        return !delSet.has(img.id);
+      });
+      snapshot.likes = snapshot.likes.filter(function keepLike(l) {
+        return !delSet.has(l.image_id);
+      });
+      const bucket = STORAGE_BUCKET;
+      for (let p = 0; p < pathsToDrop.length; p++) {
+        const key = `${bucket}/${pathsToDrop[p]}`;
+        delete snapshot.storagePublicUrls[key];
+      }
+      persistSnapshot(snapshot);
+      return ok(null);
+    }
     return err('images: 不支持的操作');
   }
 
@@ -451,6 +487,20 @@ class MockStorageBucket {
       snapshot.storagePublicUrls[key] ??
       `https://mock.invalid/${encodeURIComponent(this.bucket)}/${encodeURIComponent(path)}`;
     return { data: { publicUrl: url } };
+  }
+
+  async remove(paths: string[]) {
+    await delay();
+    if (!paths.length) {
+      return ok({ data: [] });
+    }
+    const bucket = this.bucket;
+    for (let i = 0; i < paths.length; i++) {
+      const key = `${bucket}/${paths[i]}`;
+      delete snapshot.storagePublicUrls[key];
+    }
+    persistSnapshot(snapshot);
+    return ok({ data: [] });
   }
 }
 

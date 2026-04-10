@@ -1,0 +1,416 @@
+[
+  {
+    "id": "11111111-1111-4111-8111-111111111111",
+    "name": "单图居中",
+    "description": "一张主图置于画布中央",
+    "thumbnail_url": null,
+    "layout": {
+      "version": 1,
+      "elements": [
+        {
+          "id": "tpl-el-1",
+          "src": "https://picsum.photos/seed/puzzle-a/640/480",
+          "xPct": 15,
+          "yPct": 12.5,
+          "wPct": 70,
+          "hPct": 75,
+          "zIndex": 1,
+          "rotation": 0
+        }
+      ]
+    },
+    "created_at": "2026-01-01T00:00:00.000Z"
+  },
+  {
+    "id": "22222222-2222-4222-8222-222222222222",
+    "name": "双图并排",
+    "description": "左右两栏拼图",
+    "thumbnail_url": null,
+    "layout": {
+      "version": 1,
+      "elements": [
+        {
+          "id": "tpl-el-a",
+          "src": "https://picsum.photos/seed/puzzle-b1/520/640",
+          "xPct": 5,
+          "yPct": 15,
+          "wPct": 42,
+          "hPct": 70,
+          "zIndex": 1
+        },
+        {
+          "id": "tpl-el-b",
+          "src": "https://picsum.photos/seed/puzzle-b2/520/640",
+          "xPct": 53,
+          "yPct": 15,
+          "wPct": 42,
+          "hPct": 70,
+          "zIndex": 2
+        }
+      ]
+    },
+    "created_at": "2026-01-01T00:00:00.000Z"
+  },
+  {
+    "id": "33333333-3333-4333-8333-333333333333",
+    "name": "三格横排",
+    "description": "内置「模板目录」示例：三张小图横向排列（可改 public/templates-catalog.json 扩展）",
+    "thumbnail_url": null,
+    "layout": {
+      "version": 1,
+      "elements": [
+        {
+          "id": "tpl-el-3a",
+          "src": "https://picsum.photos/seed/puzzle-c1/360/480",
+          "xPct": 4,
+          "yPct": 18,
+          "wPct": 28,
+          "hPct": 64,
+          "zIndex": 1
+        },
+        {
+          "id": "tpl-el-3b",
+          "src": "https://picsum.photos/seed/puzzle-c2/360/480",
+          "xPct": 36,
+          "yPct": 18,
+          "wPct": 28,
+          "hPct": 64,
+          "zIndex": 2
+        },
+        {
+          "id": "tpl-el-3c",
+          "src": "https://picsum.photos/seed/puzzle-c3/360/480",
+          "xPct": 68,
+          "yPct": 18,
+          "wPct": 28,
+          "hPct": 64,
+          "zIndex": 3
+        }
+      ]
+    },
+    "created_at": "2026-01-01T00:00:00.000Z"
+  },
+
+  {
+    "id": "bg-0001-0001-0001-000000000001",
+    "name": "极简白底",
+    "description": "纯白背景，突出图片主体",
+    "thumbnail_url": null,
+    "layout": {
+      "version": 1,
+      "background": { "type": "color", "value": "#ffffff" },
+      "elements": [
+        {
+          "id": "tpl-el-1",
+          "src": "https://picsum.photos/seed/bg1/800/800",
+          "xPct": 15,
+          "yPct": 15,
+          "wPct": 70,
+          "hPct": 70,
+          "zIndex": 1,
+          "rotation": 0
+        }
+      ]
+    },
+    "created_at": "2026-04-10T00:00:00.000Z"
+  },
+  {
+    "id": "bg-0002-0002-0002-000000000002",
+    "name": "复古羊皮纸",
+    "description": "暖黄复古背景，适合怀旧照片",
+    "thumbnail_url": null,
+    "layout": {
+      "version": 1,
+      "background": { "type": "color", "value": "#fdf6e3" },
+      "elements": [
+        {
+          "id": "tpl-el-2a",
+          "src": "https://picsum.photos/seed/bg2a/600/600",
+          "xPct": 10,
+          "yPct": 15,
+          "wPct": 38,
+          "hPct": 70,
+          "zIndex": 1
+        },
+        {
+          "id": "tpl-el-2b",
+          "src": "https://picsum.photos/seed/bg2b/600/600",
+          "xPct": 52,
+          "yPct": 15,
+          "wPct": 38,
+          "hPct": 70,
+          "zIndex": 2
+        }
+      ]
+    },
+    "created_at": "2026-04-10T00:00:00.000Z"
+  },
+  {
+    "id": "bg-0003-0003-0003-000000000003",
+    "name": "渐变晨曦",
+    "description": "橙黄渐变背景，温暖活力",
+    "thumbnail_url": null,
+    "layout": {
+      "version": 1,
+      "background": {
+        "type": "gradient",
+        "value": "linear-gradient(135deg, #ffecd2 0%, #fcb69f 100%)"
+      },
+      "elements": [
+        {
+          "id": "tpl-el-3a",
+          "src": "https://picsum.photos/seed/bg3a/400/400",
+          "xPct": 8,
+          "yPct": 8,
+          "wPct": 40,
+          "hPct": 40,
+          "zIndex": 1
+        },
+        {
+          "id": "tpl-el-3b",
+          "src": "https://picsum.photos/seed/bg3b/400/400",
+          "xPct": 52,
+          "yPct": 8,
+          "wPct": 40,
+          "hPct": 40,
+          "zIndex": 2
+        },
+        {
+          "id": "tpl-el-3c",
+          "src": "https://picsum.photos/seed/bg3c/400/400",
+          "xPct": 30,
+          "yPct": 52,
+          "wPct": 40,
+          "hPct": 40,
+          "zIndex": 3
+        }
+      ]
+    },
+    "created_at": "2026-04-10T00:00:00.000Z"
+  },
+  {
+    "id": "bg-0004-0004-0004-000000000004",
+    "name": "大理石纹理",
+    "description": "高级灰大理石纹理背景",
+    "thumbnail_url": null,
+    "layout": {
+      "version": 1,
+      "background": {
+        "type": "image",
+        "value": "https://picsum.photos/seed/tpl-bg-marble/1600/1200"
+      },
+      "elements": [
+        {
+          "id": "tpl-el-4a",
+          "src": "https://picsum.photos/seed/bg4a/500/500",
+          "xPct": 5,
+          "yPct": 5,
+          "wPct": 90,
+          "hPct": 45,
+          "zIndex": 1
+        },
+        {
+          "id": "tpl-el-4b",
+          "src": "https://picsum.photos/seed/bg4b/300/300",
+          "xPct": 5,
+          "yPct": 55,
+          "wPct": 42,
+          "hPct": 40,
+          "zIndex": 2
+        },
+        {
+          "id": "tpl-el-4c",
+          "src": "https://picsum.photos/seed/bg4c/300/300",
+          "xPct": 53,
+          "yPct": 55,
+          "wPct": 42,
+          "hPct": 40,
+          "zIndex": 3
+        }
+      ]
+    },
+    "created_at": "2026-04-10T00:00:00.000Z"
+  },
+  {
+    "id": "bg-0005-0005-0005-000000000005",
+    "name": "水彩晕染",
+    "description": "梦幻水彩晕染背景",
+    "thumbnail_url": null,
+    "layout": {
+      "version": 1,
+      "background": {
+        "type": "image",
+        "value": "https://picsum.photos/seed/tpl-bg-watercolor/1600/1200"
+      },
+      "elements": [
+        {
+          "id": "tpl-el-5a",
+          "src": "https://picsum.photos/seed/bg5a/600/600",
+          "xPct": 20,
+          "yPct": 20,
+          "wPct": 60,
+          "hPct": 60,
+          "zIndex": 1,
+          "rotation": 3
+        }
+      ]
+    },
+    "created_at": "2026-04-10T00:00:00.000Z"
+  },
+  {
+    "id": "bg-0006-0006-0006-000000000006",
+    "name": "深邃夜空",
+    "description": "深蓝色星空背景，适合夜景照片",
+    "thumbnail_url": null,
+    "layout": {
+      "version": 1,
+      "background": { "type": "color", "value": "#0b1a2e" },
+      "elements": [
+        {
+          "id": "tpl-el-6a",
+          "src": "https://picsum.photos/seed/bg6a/400/400",
+          "xPct": 5,
+          "yPct": 10,
+          "wPct": 42,
+          "hPct": 80,
+          "zIndex": 1
+        },
+        {
+          "id": "tpl-el-6b",
+          "src": "https://picsum.photos/seed/bg6b/400/400",
+          "xPct": 53,
+          "yPct": 10,
+          "wPct": 42,
+          "hPct": 80,
+          "zIndex": 2
+        }
+      ]
+    },
+    "created_at": "2026-04-10T00:00:00.000Z"
+  },
+  {
+    "id": "bg-0007-0007-0007-000000000007",
+    "name": "粉色糖果",
+    "description": "粉嫩渐变，适合可爱风格",
+    "thumbnail_url": null,
+    "layout": {
+      "version": 1,
+      "background": {
+        "type": "gradient",
+        "value": "linear-gradient(120deg, #fccb90 0%, #d57eeb 100%)"
+      },
+      "elements": [
+        {
+          "id": "tpl-el-7a",
+          "src": "https://picsum.photos/seed/bg7a/300/300",
+          "xPct": 10,
+          "yPct": 15,
+          "wPct": 35,
+          "hPct": 70,
+          "zIndex": 1
+        },
+        {
+          "id": "tpl-el-7b",
+          "src": "https://picsum.photos/seed/bg7b/300/300",
+          "xPct": 55,
+          "yPct": 15,
+          "wPct": 35,
+          "hPct": 70,
+          "zIndex": 2
+        }
+      ]
+    },
+    "created_at": "2026-04-10T00:00:00.000Z"
+  },
+  {
+    "id": "bg-0008-0008-0008-000000000008",
+    "name": "木纹质感",
+    "description": "自然木纹背景，适合手作或户外照片",
+    "thumbnail_url": null,
+    "layout": {
+      "version": 1,
+      "background": {
+        "type": "image",
+        "value": "https://picsum.photos/seed/tpl-bg-woodgrain/1600/1200"
+      },
+      "elements": [
+        {
+          "id": "tpl-el-8a",
+          "src": "https://picsum.photos/seed/bg8a/400/400",
+          "xPct": 10,
+          "yPct": 10,
+          "wPct": 80,
+          "hPct": 40,
+          "zIndex": 1
+        },
+        {
+          "id": "tpl-el-8b",
+          "src": "https://picsum.photos/seed/bg8b/300/300",
+          "xPct": 10,
+          "yPct": 55,
+          "wPct": 35,
+          "hPct": 35,
+          "zIndex": 2
+        },
+        {
+          "id": "tpl-el-8c",
+          "src": "https://picsum.photos/seed/bg8c/300/300",
+          "xPct": 55,
+          "yPct": 55,
+          "wPct": 35,
+          "hPct": 35,
+          "zIndex": 3
+        }
+      ]
+    },
+    "created_at": "2026-04-10T00:00:00.000Z"
+  },
+  {
+    "id": "bg-0009-0009-0009-000000000009",
+    "name": "极简灰",
+    "description": "中性灰背景，百搭任何照片",
+    "thumbnail_url": null,
+    "layout": {
+      "version": 1,
+      "background": { "type": "color", "value": "#e0e0e0" },
+      "elements": [
+        {
+          "id": "tpl-el-9a",
+          "src": "https://picsum.photos/seed/bg9a/400/400",
+          "xPct": 25,
+          "yPct": 25,
+          "wPct": 50,
+          "hPct": 50,
+          "zIndex": 1,
+          "shape": "circle"
+        }
+      ]
+    },
+    "created_at": "2026-04-10T00:00:00.000Z"
+  },
+  {
+    "id": "bg-0010-0010-0010-000000000010",
+    "name": "绿叶清新",
+    "description": "植物纹理背景，自然清新",
+    "thumbnail_url": null,
+    "layout": {
+      "version": 1,
+      "background": {
+        "type": "image",
+        "value": "https://picsum.photos/seed/tpl-bg-foliage/1600/1200"
+      },
+      "elements": [
+        {
+          "id": "tpl-el-10a",
+          "src": "https://picsum.photos/seed/bg10a/500/500",
+          "xPct": 15,
+          "yPct": 10,
+          "wPct": 70,
+          "hPct": 80,
+          "zIndex": 1
+        }
+      ]
+    },
+    "created_at": "2026-04-10T00:00:00.000Z"
+  }
+]

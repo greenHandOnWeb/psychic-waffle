@@ -37,9 +37,17 @@ export interface AudioTimelineSegment {
   sourceUrl?: string;
 }
 
+/** 模板目录 JSON 中的画布背景（与作品 layout.backgroundColor / backgroundImageSrc 并存时可迁移） */
+export interface PuzzleLayoutCatalogBackground {
+  type: 'color' | 'gradient' | 'image';
+  value: string;
+}
+
 export interface PuzzleLayout {
   elements: LayoutElement[];
   version?: number;
+  /** 模板目录：color / gradient / image */
+  background?: PuzzleLayoutCatalogBackground;
   /** 画布底色（CSS 颜色字符串） */
   backgroundColor?: string | null;
   /** 铺满画布的背景图（URL 或 data URL） */
@@ -71,7 +79,7 @@ export interface ImageRow {
   likes_count?: number;
   /** single=上传底稿；collage=保存布局生成的成品 */
   gallery_category?: 'single' | 'collage';
-  /** 拼团成品对应的源单图 id */
+  /** 拼图成品对应的源单图 id */
   source_image_id?: string | null;
 }
 

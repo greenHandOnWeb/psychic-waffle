@@ -3,16 +3,33 @@
     <section class="rounded-xl border border-slate-800 bg-slate-900/60 p-6">
       <h2 class="mb-2 text-lg font-medium text-white">上传图片</h2>
       <p class="mb-4 text-sm text-slate-400">
-        上传的素材会进入<strong class="text-slate-200">单图画廊</strong>，可进入编辑器排版；在编辑器中「保存并生成拼团」后，成品出现在<strong
+        上传的素材会进入<strong class="text-slate-200">单图画廊</strong>，可进入编辑器排版；在编辑器中「保存并生成拼图」后，成品出现在<strong
           class="text-slate-200"
-          >拼团画廊</strong
+          >拼图画廊</strong
         >。
       </p>
+      <label class="mb-3 block text-sm text-slate-400">
+        <span class="mb-1 block text-xs">自定义标签（可选，逗号或空格分隔，将与 AI 猜标合并去重）</span>
+        <input
+          v-model="uploadTagsRaw"
+          type="text"
+          class="mt-1 w-full max-w-xl rounded-lg border border-slate-700 bg-slate-950 px-3 py-2 text-sm text-slate-100 placeholder:text-slate-600 focus:border-sky-500 focus:outline-none focus:ring-1 focus:ring-sky-500"
+          placeholder="例如：旅行, 壁纸"
+          :disabled="uploading"
+        />
+      </label>
       <div class="flex flex-wrap items-center gap-3">
         <label
           class="inline-flex cursor-pointer items-center gap-2 rounded-lg bg-sky-600 px-4 py-2 text-sm font-medium text-white hover:bg-sky-500"
         >
-          <input type="file" accept="image/*" class="hidden" :disabled="uploading" @change="onPickFile" />
+          <input
+            type="file"
+            accept="image/*"
+            multiple
+            class="hidden"
+            :disabled="uploading"
+            @change="onPickFile"
+          />
           选择图片
         </label>
         <span v-if="uploading" class="text-sm text-slate-400">处理中…</span>
@@ -40,7 +57,34 @@
         </div>
       </div>
 
-      <GalleryTagFilter v-model="selectedTagFilters" class="mb-4" :tags="distinctTags" />
+      <div class="mb-4 flex flex-wrap items-end justify-between gap-4">
+        <GalleryTagFilter v-model="selectedTagFilters" class="min-w-0 flex-1" :tags="distinctTags" />
+        <div class="flex flex-wrap items-center gap-2">
+          <template v-if="sessionStore.userId">
+            <button
+              type="button"
+              class="rounded-lg border border-slate-600 px-3 py-2 text-sm text-slate-200 hover:bg-slate-800 disabled:opacity-50"
+              :disabled="deleting"
+              @click="bulkDeleteMode = !bulkDeleteMode"
+            >
+              {{ bulkDeleteMode ? '退出批量删除' : '批量删除' }}
+            </button>
+            <button
+              v-if="bulkDeleteMode && selectedForBulkDeleteIds.length"
+              type="button"
+              class="rounded-lg border border-rose-800 bg-rose-950/40 px-3 py-2 text-sm text-rose-200 hover:bg-rose-950/60 disabled:opacity-50"
+              :disabled="deleting"
+              @click="onBulkDeleteConfirm"
+            >
+              删除选中（{{ selectedForBulkDeleteIds.length }}）
+            </button>
+          </template>
+          <GenerateVideoControl
+          :selected-images="selectedVideoImages"
+          @update:video-order="onWizardVideoOrder"
+        />
+        </div>
+      </div>
 
       <div v-if="loading" class="text-slate-400">加载中…</div>
       <div
@@ -54,13 +98,29 @@
           :image="img"
           :is-collage="isCollageItem(img)"
           :liked-by-me="Boolean(likedByMeMap[img.id])"
+          :video-selected="selectedForVideoIds.includes(img.id)"
+          :is-owner="Boolean(sessionStore.userId && sessionStore.userId === img.user_id)"
+          :bulk-delete-mode="bulkDeleteMode"
+          :bulk-delete-selected="selectedForBulkDeleteIds.includes(img.id)"
+          :deleting="deleting"
           @toggle-like="onToggleLike"
+          @toggle-video-select="toggleVideoSelect"
+          @edit-tags="openTagEditor"
+          @delete-image="onDeleteOneImage"
+          @toggle-bulk-delete-select="toggleBulkDeleteSelect"
         />
       </div>
       <p v-if="!loading && !images.length" class="text-slate-500">
         {{ emptyHint }}
       </p>
     </section>
+
+    <ImageTagsEditorDialog
+      :open="tagsEditorImage !== null"
+      :image="tagsEditorImage"
+      @close="tagsEditorImage = null"
+      @saved="onImageTagsSaved"
+    />
   </div>
 </template>
 
@@ -69,12 +129,16 @@ import { computed, onMounted, ref, watch } from 'vue';
 import { toast } from 'vue-sonner';
 import GalleryImageCard from '@/components/gallery-image-card.vue';
 import GalleryTagFilter from '@/components/gallery-tag-filter.vue';
+import GenerateVideoControl from '@/components/generate-video-control.vue';
+import ImageTagsEditorDialog from '@/components/image-tags-editor-dialog.vue';
 import { fetchGalleryDistinctTags } from '@/composables/useGalleryTags';
 import { toggleImageLikeRpc } from '@/composables/useLikes';
 import { getWriterUserId, supabase } from '@/lib/supabase';
 import {
   GALLERY_CATEGORY_COLLAGE,
   GALLERY_CATEGORY_SINGLE,
+  GALLERY_DELETE_BATCH_CONFIRM,
+  GALLERY_DELETE_ONE_CONFIRM,
   STORAGE_BUCKET,
 } from '@/data';
 import type { ImageRow } from '@/types/database';
@@ -85,13 +149,14 @@ import {
   compressImageForUpload,
   UploadTooLargeError,
 } from '@/utils/image-compress';
+import { mergeUniqueTagGroups, parseTagsInput } from '@/utils/parse-tags';
 
 type GalleryTab = 'all' | 'single' | 'collage';
 
 const galleryTabs: { value: GalleryTab; label: string }[] = [
   { value: 'all', label: '全部' },
   { value: 'single', label: '单图' },
-  { value: 'collage', label: '拼团' },
+  { value: 'collage', label: '拼图' },
 ];
 
 const images = ref<ImageRow[]>([]);
@@ -102,6 +167,14 @@ const distinctTags = ref<string[]>([]);
 const selectedTagFilters = ref<string[]>([]);
 const likedByMeMap = ref<Record<string, boolean>>({});
 const sessionStore = useSessionStore();
+/** 勾选顺序即视频中图片顺序 */
+const selectedForVideoIds = ref<string[]>([]);
+const tagsEditorImage = ref<ImageRow | null>(null);
+const uploadTagsRaw = ref('');
+/** 批量删除：勾选多张后一键删除 */
+const bulkDeleteMode = ref(false);
+const selectedForBulkDeleteIds = ref<string[]>([]);
+const deleting = ref(false);
 
 function isCollageItem(img: ImageRow): boolean {
   return (img.gallery_category ?? GALLERY_CATEGORY_SINGLE) === GALLERY_CATEGORY_COLLAGE;
@@ -112,13 +185,216 @@ const emptyHint = computed(function emptyHintComputed() {
     return '暂无单图素材，请先上传。';
   }
   if (galleryTab.value === 'collage') {
-    return '暂无拼团成品，请在编辑器中点击「保存并生成拼团」。';
+    return '暂无拼图成品，请在编辑器中点击「保存并生成拼图」。';
   }
   return '暂无作品，先上传一张单图吧。';
 });
 
 function setGalleryTab(value: GalleryTab) {
   galleryTab.value = value;
+}
+
+const selectedVideoImages = computed(function selectedVideoImagesComputed() {
+  const order = selectedForVideoIds.value;
+  const list = images.value;
+  const map = new Map(
+    list.map(function toMapEntry(r) {
+      return [r.id, r] as const;
+    })
+  );
+  const out: ImageRow[] = [];
+  for (let i = 0; i < order.length; i++) {
+    const row = map.get(order[i]);
+    if (row) {
+      out.push(row);
+    }
+  }
+  return out;
+});
+
+function pruneVideoSelection() {
+  const uid = sessionStore.userId;
+  if (!uid) {
+    selectedForVideoIds.value = [];
+    return;
+  }
+  const allowed = new Set(
+    images.value
+      .filter(function owned(r) {
+        return r.user_id === uid;
+      })
+      .map(function idOnly(r) {
+        return r.id;
+      })
+  );
+  selectedForVideoIds.value = selectedForVideoIds.value.filter(function keep(id) {
+    return allowed.has(id);
+  });
+}
+
+function pruneBulkDeleteSelection() {
+  const uid = sessionStore.userId;
+  if (!uid) {
+    selectedForBulkDeleteIds.value = [];
+    return;
+  }
+  const allowed = new Set(
+    images.value
+      .filter(function ownedBulk(r) {
+        return r.user_id === uid;
+      })
+      .map(function idBulk(r) {
+        return r.id;
+      })
+  );
+  selectedForBulkDeleteIds.value = selectedForBulkDeleteIds.value.filter(function keepBulk(id) {
+    return allowed.has(id);
+  });
+}
+
+function onWizardVideoOrder(orderedGalleryIds: string[]) {
+  selectedForVideoIds.value = orderedGalleryIds.slice();
+}
+
+function toggleVideoSelect(img: ImageRow) {
+  const uid = sessionStore.userId;
+  if (!uid || img.user_id !== uid) {
+    return;
+  }
+  const id = img.id;
+  const cur = selectedForVideoIds.value;
+  const idx = cur.indexOf(id);
+  if (idx >= 0) {
+    selectedForVideoIds.value = cur.filter(function notId(x) {
+      return x !== id;
+    });
+  } else {
+    selectedForVideoIds.value = cur.concat([id]);
+  }
+}
+
+function toggleBulkDeleteSelect(img: ImageRow) {
+  const uid = sessionStore.userId;
+  if (!uid || img.user_id !== uid || deleting.value) {
+    return;
+  }
+  const id = img.id;
+  const cur = selectedForBulkDeleteIds.value;
+  const idx = cur.indexOf(id);
+  if (idx >= 0) {
+    selectedForBulkDeleteIds.value = cur.filter(function notBulkId(x) {
+      return x !== id;
+    });
+  } else {
+    selectedForBulkDeleteIds.value = cur.concat([id]);
+  }
+}
+
+function onDeleteOneImage(img: ImageRow) {
+  if (deleting.value) {
+    return;
+  }
+  const uid = sessionStore.userId;
+  if (!uid || img.user_id !== uid) {
+    return;
+  }
+  const label = (img.title || '未命名').trim() || '未命名';
+  const msg = GALLERY_DELETE_ONE_CONFIRM.replace('{title}', label);
+  if (!window.confirm(msg)) {
+    return;
+  }
+  void runDeleteImages([img.id]);
+}
+
+function onBulkDeleteConfirm() {
+  const ids = selectedForBulkDeleteIds.value.slice();
+  if (!ids.length || deleting.value) {
+    return;
+  }
+  const msg = GALLERY_DELETE_BATCH_CONFIRM.replace('{n}', String(ids.length));
+  if (!window.confirm(msg)) {
+    return;
+  }
+  void runDeleteImages(ids);
+}
+
+async function runDeleteImages(ids: string[]) {
+  const uid = sessionStore.userId;
+  if (!uid || !ids.length || deleting.value) {
+    return;
+  }
+  const idSet = new Set(ids);
+  const rows = images.value.filter(function rowOwned(r) {
+    return idSet.has(r.id) && r.user_id === uid;
+  });
+  if (!rows.length) {
+    return;
+  }
+  const ownedIds = rows.map(function rowId(r) {
+    return r.id;
+  });
+  const paths = rows
+    .map(function rowPath(r) {
+      return r.storage_path;
+    })
+    .filter(Boolean);
+  deleting.value = true;
+  const { error } = await supabase
+    .from('images')
+    .delete()
+    .in('id', ownedIds)
+    .eq('user_id', uid);
+  if (error) {
+    console.error('[gallery] delete images', error);
+    toast.error(error.message || '删除失败');
+    deleting.value = false;
+    return;
+  }
+  if (paths.length) {
+    const { error: storageErr } = await supabase.storage.from(STORAGE_BUCKET).remove(paths);
+    if (storageErr) {
+      console.error('[gallery] storage remove', storageErr);
+      toast.error(storageErr.message || '存储中的文件删除失败');
+    }
+  }
+  const removed = new Set(ownedIds);
+  images.value = images.value.filter(function keepRow(r) {
+    return !removed.has(r.id);
+  });
+  selectedForVideoIds.value = selectedForVideoIds.value.filter(function keepVid(id) {
+    return !removed.has(id);
+  });
+  selectedForBulkDeleteIds.value = selectedForBulkDeleteIds.value.filter(function keepBulkId(id) {
+    return !removed.has(id);
+  });
+  if (tagsEditorImage.value && removed.has(tagsEditorImage.value.id)) {
+    tagsEditorImage.value = null;
+  }
+  const nextLiked = Object.assign({}, likedByMeMap.value);
+  for (let i = 0; i < ownedIds.length; i++) {
+    delete nextLiked[ownedIds[i]];
+  }
+  likedByMeMap.value = nextLiked;
+  deleting.value = false;
+  toast.success(ownedIds.length === 1 ? '已删除' : `已删除 ${ownedIds.length} 张`);
+  void loadDistinctTags();
+}
+
+function openTagEditor(img: ImageRow) {
+  tagsEditorImage.value = img;
+}
+
+function onImageTagsSaved(payload: { id: string; tags: string[]; title: string | null }) {
+  const idx = images.value.findIndex(function byImageId(r) {
+    return r.id === payload.id;
+  });
+  if (idx >= 0) {
+    images.value[idx] = Object.assign({}, images.value[idx], {
+      tags: payload.tags,
+      title: payload.title,
+    });
+  }
+  void loadDistinctTags();
 }
 
 async function hydrateLikesForRows(rows: ImageRow[]) {
@@ -184,6 +460,8 @@ async function loadImages() {
     const rows = (data as ImageRow[]) ?? [];
     images.value = rows;
     await hydrateLikesForRows(rows);
+    pruneVideoSelection();
+    pruneBulkDeleteSelection();
   } catch (e) {
     console.error('[gallery] load images', e);
     toast.error('加载画廊失败');
@@ -231,91 +509,115 @@ function patchImageLikeState(imageId: string, likesCount: number, liked: boolean
 
 async function onPickFile(ev: Event) {
   const input = ev.target as HTMLInputElement;
-  const file = input.files?.[0];
+  const files = Array.from(input.files ?? []);
   input.value = '';
-  if (!file) {
+  if (!files.length) {
     return;
   }
-  try {
-    assertWithinMaxUploadSize(file);
-  } catch (e) {
-    if (e instanceof UploadTooLargeError) {
-      toast.error(e.message);
-    } else {
-      console.error(e);
-      toast.error('文件校验失败');
+  for (let f = 0; f < files.length; f++) {
+    try {
+      assertWithinMaxUploadSize(files[f]);
+    } catch (e) {
+      if (e instanceof UploadTooLargeError) {
+        toast.error(`${files[f].name}: ${e.message}`);
+      } else {
+        console.error(e);
+        toast.error('文件校验失败');
+      }
+      return;
     }
-    return;
   }
 
   uploading.value = true;
+  let uid: string;
   try {
-    let uid: string;
-    try {
-      uid = await getWriterUserId();
-    } catch (e) {
-      toast.error(e instanceof Error ? e.message : '会话初始化失败');
-      return;
+    uid = await getWriterUserId();
+  } catch (e) {
+    uploading.value = false;
+    toast.error(e instanceof Error ? e.message : '会话初始化失败');
+    return;
+  }
+
+  let ok = 0;
+  let lastErr = '';
+  const baseTs = Date.now();
+  try {
+    for (let i = 0; i < files.length; i++) {
+      const file = files[i];
+      try {
+        const compressed = await compressImageForUpload(file);
+        const customTags = parseTagsInput(uploadTagsRaw.value);
+        const aiTags = await generateMockTags(compressed);
+        const tags = mergeUniqueTagGroups([customTags, aiTags]);
+        const safeName = compressed.name.replace(/[^\w.-]+/g, '_');
+        const path = `${uid}/${baseTs}-${i}-${safeName}`;
+
+        const { error: upErr } = await supabase.storage
+          .from(STORAGE_BUCKET)
+          .upload(path, compressed, { upsert: true });
+        if (upErr) {
+          console.error('[gallery] storage upload', upErr);
+          lastErr = upErr.message || '上传存储失败';
+          continue;
+        }
+
+        const { data: pub } = supabase.storage.from(STORAGE_BUCKET).getPublicUrl(path);
+        const publicUrl = pub.publicUrl;
+
+        const defaultLayout = {
+          version: 1,
+          elements: [
+            {
+              id: crypto.randomUUID(),
+              src: publicUrl,
+              xPct: 5,
+              yPct: 5,
+              wPct: 90,
+              hPct: 90,
+              zIndex: 1,
+              rotation: 0,
+            },
+          ],
+        };
+
+        const { error: insErr } = await supabase
+          .from('images')
+          .insert({
+            user_id: uid,
+            storage_path: path,
+            public_url: publicUrl,
+            title: safeName,
+            tags,
+            layout: defaultLayout,
+            file_size_bytes: compressed.size,
+            is_public: true,
+            gallery_category: GALLERY_CATEGORY_SINGLE,
+            source_image_id: null,
+          })
+          .select()
+          .single();
+
+        if (insErr) {
+          console.error('[gallery] insert image', insErr);
+          lastErr = insErr.message || '写入数据库失败';
+          continue;
+        }
+        ok++;
+      } catch (rowErr) {
+        console.error('[gallery] single file upload', rowErr);
+        lastErr = rowErr instanceof Error ? rowErr.message : '单张处理失败';
+      }
     }
-    const compressed = await compressImageForUpload(file);
-    const tags = await generateMockTags(compressed);
-    const safeName = compressed.name.replace(/[^\w.-]+/g, '_');
-    const path = `${uid}/${Date.now()}-${safeName}`;
 
-    const { error: upErr } = await supabase.storage
-      .from(STORAGE_BUCKET)
-      .upload(path, compressed, { upsert: true });
-    if (upErr) {
-      console.error('[gallery] storage upload', upErr);
-      toast.error(upErr.message || '上传存储失败');
-      return;
+    if (ok > 0) {
+      uploadTagsRaw.value = '';
+      toast.success(ok === files.length ? `已上传 ${ok} 张（单图）` : `已上传 ${ok}/${files.length} 张`);
+      await loadDistinctTags();
+      await loadImages();
     }
-
-    const { data: pub } = supabase.storage.from(STORAGE_BUCKET).getPublicUrl(path);
-    const publicUrl = pub.publicUrl;
-
-    const defaultLayout = {
-      version: 1,
-      elements: [
-        {
-          id: crypto.randomUUID(),
-          src: publicUrl,
-          xPct: 5,
-          yPct: 5,
-          wPct: 90,
-          hPct: 90,
-          zIndex: 1,
-          rotation: 0,
-        },
-      ],
-    };
-
-    const { error: insErr } = await supabase
-      .from('images')
-      .insert({
-        user_id: uid,
-        storage_path: path,
-        public_url: publicUrl,
-        title: safeName,
-        tags,
-        layout: defaultLayout,
-        file_size_bytes: compressed.size,
-        is_public: true,
-        gallery_category: GALLERY_CATEGORY_SINGLE,
-        source_image_id: null,
-      })
-      .select()
-      .single();
-
-    if (insErr) {
-      console.error('[gallery] insert image', insErr);
-      toast.error(insErr.message || '写入数据库失败');
-      return;
+    if (ok < files.length && lastErr) {
+      toast.error(lastErr);
     }
-
-    toast.success('上传成功（已归入单图）');
-    await loadDistinctTags();
-    await loadImages();
   } catch (e) {
     console.error('[gallery] upload flow', e);
     toast.error('上传流程异常');
@@ -335,6 +637,24 @@ watch(
   },
   { deep: true }
 );
+
+watch(
+  function sessionUserId() {
+    return sessionStore.userId;
+  },
+  function onSessionUserChange() {
+    pruneVideoSelection();
+    pruneBulkDeleteSelection();
+    bulkDeleteMode.value = false;
+    selectedForBulkDeleteIds.value = [];
+  }
+);
+
+watch(bulkDeleteMode, function onBulkModeChange(active) {
+  if (!active) {
+    selectedForBulkDeleteIds.value = [];
+  }
+});
 
 onMounted(function galleryMounted() {
   void Promise.all([loadDistinctTags(), loadImages()]);

@@ -1,20 +1,21 @@
 <template>
-  <TransitionRoot appear :show="modelValue" as="template">
+  <TransitionRoot appear :show="modelValue" as="div" class="contents">
     <Dialog class="relative z-50" @close="close">
       <TransitionChild
-        as="template"
+        as="div"
+        class="fixed inset-0 bg-black/60"
+        aria-hidden="true"
         enter="ease-out duration-200"
         enter-from="opacity-0"
         enter-to="opacity-100"
         leave="ease-in duration-150"
         leave-from="opacity-100"
         leave-to="opacity-0"
-      >
-        <div class="fixed inset-0 bg-black/60" aria-hidden="true" />
-      </TransitionChild>
+      />
       <div class="fixed inset-0 flex items-center justify-center p-4">
         <TransitionChild
-          as="template"
+          as="div"
+          class="w-full max-w-lg"
           enter="ease-out duration-200"
           enter-from="opacity-0 scale-95"
           enter-to="opacity-100 scale-100"
@@ -22,9 +23,10 @@
           leave-from="opacity-100 scale-100"
           leave-to="opacity-0 scale-95"
         >
-          <DialogPanel
-            class="flex max-h-[88vh] w-full max-w-lg flex-col rounded-xl border border-slate-700 bg-slate-900 shadow-2xl"
-          >
+          <div class="w-full max-w-lg">
+            <DialogPanel
+              class="flex max-h-[88vh] w-full flex-col rounded-xl border border-slate-700 bg-slate-900 shadow-2xl"
+            >
             <DialogTitle class="border-b border-slate-800 px-4 py-3 text-lg font-semibold text-white">
               添加表情包
             </DialogTitle>
@@ -83,12 +85,9 @@
                   v-if="!pixabayReady"
                   class="rounded border border-amber-800/50 bg-amber-950/40 px-3 py-2 text-xs leading-relaxed text-amber-200"
                 >
-                  未读取到 <code class="text-amber-100">VITE_PIXABAY_API_KEY</code>。请在项目根目录的
-                  <code class="text-amber-100">.env.development</code>、<code class="text-amber-100">.env</code>
-                  或 <code class="text-amber-100">.env.local</code> 中添加一行（勿加引号）：
-                  <code class="mt-1 block break-all text-amber-100">VITE_PIXABAY_API_KEY=你的密钥</code>
-                  保存后需<strong>结束当前 dev 进程再重新执行</strong>
-                  <code class="text-amber-100">npm run dev</code>。免费申请见
+                  未配置 Pixabay Key。可在顶部导航进入<strong class="text-amber-100">设置</strong>页填写（会保存在本机），或在
+                  <code class="text-amber-100">.env</code> 中设置
+                  <code class="text-amber-100">VITE_PIXABAY_API_KEY</code>（需重启 dev）。免费申请见
                   <a
                     class="underline"
                     href="https://pixabay.com/api/docs/"
@@ -172,7 +171,8 @@
                 关闭
               </button>
             </div>
-          </DialogPanel>
+            </DialogPanel>
+          </div>
         </TransitionChild>
       </div>
     </Dialog>
@@ -188,8 +188,9 @@ import {
   twemojiAssetUrl,
   twemojiHexToEmojiChar,
 } from '@/data/stickers-common';
-import { searchPixabayStickers } from '@/services/pixabay-stickers';
+import { searchPixabayStickers, resolvePixabayApiKey } from '@/services/pixabay-stickers';
 import type { PixabayStickerHit } from '@/services/pixabay-stickers';
+import { useRuntimeSettingsStore } from '@/stores/runtime-settings';
 
 type Tab = 'twemoji' | 'kaomoji' | 'search' | 'local';
 
@@ -218,9 +219,9 @@ const searchLoading = ref(false);
 const searchError = ref('');
 const searchResults = ref<PixabayStickerHit[]>([]);
 const searchAttempted = ref(false);
+const runtimeSettings = useRuntimeSettingsStore();
 const pixabayReady = computed(function pixabayReadyComputed() {
-  const v = import.meta.env.VITE_PIXABAY_API_KEY;
-  return typeof v === 'string' && v.trim().length > 0;
+  return resolvePixabayApiKey(runtimeSettings.pixabayApiKey).length > 0;
 });
 
 function close() {
@@ -273,7 +274,7 @@ async function runSearch() {
   searchAttempted.value = true;
   searchResults.value = [];
   try {
-    searchResults.value = await searchPixabayStickers(searchQuery.value, 24);
+    searchResults.value = await searchPixabayStickers(searchQuery.value, 24, runtimeSettings.pixabayApiKey);
   } catch (e) {
     console.error('[sticker-picker] pixabay', e);
     searchError.value = e instanceof Error ? e.message : '搜索失败';

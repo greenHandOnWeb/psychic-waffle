@@ -6,7 +6,7 @@ import { EXPORT_JPEG_QUALITY, EXPORT_PIXEL_RATIO } from '@/data';
  * 使用 Fabric 内置栅格化导出（推荐）。
  * html-to-image 对 Fabric 的 lower/upper 双 canvas 结构常得到空白图。
  */
-/** 将当前画布栅格化为 JPEG Blob（用于上传「拼团」成品） */
+/** 将当前画布栅格化为 JPEG Blob（用于上传「拼图」成品） */
 export async function fabricCanvasToJpegBlob(canvas: Canvas): Promise<Blob> {
   canvas.renderAll();
   const blob = await canvas.toBlob({

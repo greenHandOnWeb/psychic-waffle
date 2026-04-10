@@ -27,18 +27,12 @@
             <ListboxOptions
               class="absolute z-30 mt-1 max-h-60 w-full overflow-auto rounded-lg border border-slate-600 bg-slate-900 py-1 text-sm shadow-xl focus:outline-none"
             >
-              <ListboxOption
-                v-for="t in tags"
-                :key="t"
-                v-slot="{ active, selected }"
-                :value="t"
-                as="template"
-              >
-                <li
-                  class="relative cursor-pointer select-none px-3 py-2"
-                  :class="active ? 'bg-slate-800 text-white' : 'text-slate-300'"
-                >
-                  <span class="flex items-center gap-2">
+              <ListboxOption v-for="t in tags" :key="t" :value="t" as="li">
+                <template #default="{ active, selected }">
+                  <span
+                    class="flex cursor-pointer select-none items-center gap-2 px-3 py-2"
+                    :class="active ? 'bg-slate-800 text-white' : 'text-slate-300'"
+                  >
                     <span
                       class="flex h-4 w-4 shrink-0 items-center justify-center rounded border text-[10px]"
                       :class="
@@ -51,7 +45,7 @@
                     </span>
                     <span class="truncate">{{ t }}</span>
                   </span>
-                </li>
+                </template>
               </ListboxOption>
             </ListboxOptions>
           </transition>
