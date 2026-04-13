@@ -374,20 +374,23 @@
       <p v-else class="text-xs text-slate-600">暂无分段，可在不同起点添加多首曲子。</p>
     </div>
 
-    <!--
-      浅色底与 Fabric background 一致，缩放后不留大块深色空边。
-      勿在 canvas 上用 bg-white：upper 透明区会挡住下层。
-    -->
-    <div
-      ref="canvasHostRef"
-      class="font-export overflow-hidden rounded-lg border border-slate-600 bg-[#f8fafc] shadow-inner"
-      style="touch-action: none; min-height: 120px"
-    >
-      <div class="flex justify-center">
-        <canvas
-          ref="canvasElRef"
-          class="editor-fabric-canvas block touch-manipulation bg-transparent flex-1"
-        />
+    <!-- -mx-4：与 App.vue main 的 px-4 对消，画布宿主占满 max-w-6xl 内容区宽度 -->
+    <div class="-mx-4">
+      <!--
+        浅色底与 Fabric background 一致，缩放后不留大块深色空边。
+        勿在 canvas 上用 bg-white：upper 透明区会挡住下层。
+      -->
+      <div
+        ref="canvasHostRef"
+        class="font-export w-full min-w-0 overflow-hidden rounded-lg border border-slate-600 bg-[#f8fafc] shadow-inner"
+        style="touch-action: none; min-height: 120px"
+      >
+        <div class="flex w-full min-w-0 justify-start">
+          <canvas
+            ref="canvasElRef"
+            class="editor-fabric-canvas block touch-manipulation bg-transparent"
+          />
+        </div>
       </div>
     </div>
     <p class="text-xs text-slate-500">
@@ -475,9 +478,6 @@ const runtimeSettings = useRuntimeSettingsStore();
 const imageId = computed(function imageIdComputed() {
   return (route.params.id as string) || '';
 });
-
-const canvasWidth = EDITOR_CANVAS_WIDTH;
-const canvasHeight = EDITOR_CANVAS_HEIGHT;
 
 const templates = ref<TemplateRow[]>([]);
 const selectedTemplateId = ref('');
@@ -816,26 +816,89 @@ async function onRemoveBackgroundSelected() {
   }
 }
 
-function syncCanvasDisplayScale() {
+/**
+ * 画布像素尺寸：宽度始终占满宿主（不留左右缝）；高度按参考宽高比推算并受视口上限约束
+ * （受 maxH 限制时不再缩小宽度，画布比例可能略扁于 4:3）
+ */
+function computeEditorCanvasSize(host: HTMLElement): { width: number; height: number } {
+  const hostW = Math.max(1, Math.floor(host.clientWidth));
+  const maxH = (EDITOR_VIEWPORT_MAX_HEIGHT_VH / 100) * window.innerHeight;
+  const refW = EDITOR_CANVAS_WIDTH;
+  const refH = EDITOR_CANVAS_HEIGHT;
+  const width = hostW;
+  const idealH = Math.round((hostW * refH) / refW);
+  const height = Math.max(1, Math.min(idealH, Math.floor(maxH)));
+  return { width, height };
+}
+
+/** 画布像素尺寸变化时缩放场景（宽高比可能变化，sx/sy 分别作用于坐标与缩放） */
+function scaleSceneForCanvasResize(c: Canvas, sx: number, sy: number): void {
+  if (!Number.isFinite(sx) || !Number.isFinite(sy) || sx <= 0 || sy <= 0) {
+    return;
+  }
+  if (Math.abs(sx - 1) < 1e-9 && Math.abs(sy - 1) < 1e-9) {
+    return;
+  }
+  const fontFactor = Math.sqrt(sx * sy);
+  const objs = c.getObjects();
+  for (let i = 0; i < objs.length; i++) {
+    const o = objs[i];
+    o.set({
+      left: (o.left ?? 0) * sx,
+      top: (o.top ?? 0) * sy,
+      scaleX: (o.scaleX ?? 1) * sx,
+      scaleY: (o.scaleY ?? 1) * sy,
+    });
+    if (o instanceof IText) {
+      const fs = o.fontSize ?? EDITOR_DEFAULT_TEXT_FONT_SIZE;
+      o.set({
+        fontSize: Math.max(
+          EDITOR_TEXT_FONT_SIZE_MIN,
+          Math.min(EDITOR_TEXT_FONT_SIZE_MAX, fs * fontFactor),
+        ),
+      });
+    }
+    o.setCoords();
+  }
+  const bgi = c.backgroundImage;
+  if (bgi instanceof FabricImage) {
+    bgi.set({
+      left: (bgi.left ?? 0) * sx,
+      top: (bgi.top ?? 0) * sy,
+      scaleX: (bgi.scaleX ?? 1) * sx,
+      scaleY: (bgi.scaleY ?? 1) * sy,
+    });
+    bgi.setCoords();
+  }
+}
+
+function syncEditorCanvasDimensions() {
   const host = canvasHostRef.value;
   const canvas = fabricCanvas;
   if (!host || !canvas?.wrapperEl) {
     return;
   }
-  const hostW = host.clientWidth;
-  if (hostW <= 0) {
-    return;
+  const next = computeEditorCanvasSize(host);
+  const newW = next.width;
+  const newH = next.height;
+  const oldW = canvas.getWidth();
+  const oldH = canvas.getHeight();
+  if (oldW > 0 && oldH > 0) {
+    const sx = newW / oldW;
+    const sy = newH / oldH;
+    if (Math.abs(sx - 1) > 1e-9 || Math.abs(sy - 1) > 1e-9) {
+      scaleSceneForCanvasResize(canvas, sx, sy);
+    }
   }
-  const maxH = (EDITOR_VIEWPORT_MAX_HEIGHT_VH / 100) * window.innerHeight;
-  let scale = hostW / EDITOR_CANVAS_WIDTH;
-  if (EDITOR_CANVAS_HEIGHT * scale > maxH) {
-    scale = maxH / EDITOR_CANVAS_HEIGHT;
-  }
-  scale = Math.min(scale, 1);
+  canvas.setDimensions({ width: newW, height: newH });
+
   const wrap = canvas.wrapperEl as HTMLDivElement;
-  wrap.style.transformOrigin = 'top center';
-  wrap.style.transform = `scale(${scale})`;
-  host.style.height = `${Math.ceil(EDITOR_CANVAS_HEIGHT * scale)}px`;
+  wrap.style.transform = '';
+  wrap.style.transformOrigin = '';
+
+  host.style.height = `${newH}px`;
+
+  canvas.requestRenderAll();
 }
 
 function bindCanvasHostResize() {
@@ -848,7 +911,7 @@ function bindCanvasHostResize() {
     return;
   }
   canvasResizeObserver = new ResizeObserver(function onHostResize() {
-    syncCanvasDisplayScale();
+    syncEditorCanvasDimensions();
   });
   canvasResizeObserver.observe(host);
 }
@@ -874,7 +937,7 @@ function unbindFabricUiEvents() {
 }
 
 function onWindowResize() {
-  syncCanvasDisplayScale();
+  syncEditorCanvasDimensions();
 }
 
 function onEditorKeydown(e: KeyboardEvent) {
@@ -992,11 +1055,15 @@ function placeImageFromLayout(img: FabricImage, el: LayoutElement, cw: number, c
     (elHtml && 'naturalHeight' in elHtml ? (elHtml as HTMLImageElement).naturalHeight : 0) ||
     1;
   const scale = Math.min(boxW / natW, boxH / natH);
+  const scaledW = natW * scale;
+  const scaledH = natH * scale;
+  const boxLeft = (el.xPct / 100) * cw;
+  const boxTop = (el.yPct / 100) * ch;
   img.set({
     scaleX: scale,
     scaleY: scale,
-    left: (el.xPct / 100) * cw,
-    top: (el.yPct / 100) * ch,
+    left: boxLeft + (boxW - scaledW) / 2,
+    top: boxTop + (boxH - scaledH) / 2,
     angle: el.rotation ?? 0,
     name: el.id,
   });
@@ -1278,7 +1345,7 @@ async function loadSingleImageEditorLayout(row: ImageRow, g: number) {
     }
     fabricCanvas?.renderAll();
     fabricCanvas?.requestRenderAll();
-    syncCanvasDisplayScale();
+    syncEditorCanvasDimensions();
   });
 }
 
@@ -1382,7 +1449,7 @@ async function loadCollageImageLayout(row: ImageRow, g: number) {
     }
     fabricCanvas?.renderAll();
     fabricCanvas?.requestRenderAll();
-    syncCanvasDisplayScale();
+    syncEditorCanvasDimensions();
   });
 }
 
@@ -1638,7 +1705,7 @@ async function applyTemplateById(tplId: string) {
   requestAnimationFrame(function rerenderTpl() {
     fabricCanvas?.renderAll();
     fabricCanvas?.requestRenderAll();
-    syncCanvasDisplayScale();
+    syncEditorCanvasDimensions();
   });
 }
 
@@ -1731,7 +1798,7 @@ async function ingestImageSources(urls: string[]) {
   requestAnimationFrame(function rerenderIngest() {
     fabricCanvas?.renderAll();
     fabricCanvas?.requestRenderAll();
-    syncCanvasDisplayScale();
+    syncEditorCanvasDimensions();
   });
 }
 
@@ -1959,7 +2026,7 @@ async function addTextBlock() {
   fabricCanvas.requestRenderAll();
   requestAnimationFrame(function afterAddText() {
     fabricCanvas?.renderAll();
-    syncCanvasDisplayScale();
+    syncEditorCanvasDimensions();
   });
 }
 
@@ -2000,7 +2067,7 @@ async function addStickerImageFromSrc(src: string) {
   fabricCanvas.requestRenderAll();
   requestAnimationFrame(function afterStickerFromSrc() {
     fabricCanvas?.renderAll();
-    syncCanvasDisplayScale();
+    syncEditorCanvasDimensions();
   });
 }
 
@@ -2045,7 +2112,7 @@ async function onStickerPickedKaomoji(text: string) {
     fabricCanvas.requestRenderAll();
     requestAnimationFrame(function afterKaomoji() {
       fabricCanvas?.renderAll();
-      syncCanvasDisplayScale();
+      syncEditorCanvasDimensions();
     });
   } catch (e) {
     console.error('[editor] kaomoji', e);
@@ -2330,9 +2397,14 @@ function initFabricIfNeeded() {
   if (!el || fabricCanvas) {
     return;
   }
+  const host = canvasHostRef.value;
+  const initialSize =
+    host && host.clientWidth > 0
+      ? computeEditorCanvasSize(host)
+      : { width: EDITOR_CANVAS_WIDTH, height: EDITOR_CANVAS_HEIGHT };
   fabricCanvas = new Canvas(el, {
-    width: canvasWidth,
-    height: canvasHeight,
+    width: initialSize.width,
+    height: initialSize.height,
     backgroundColor: EDITOR_DEFAULT_CANVAS_BACKGROUND,
     // 避免离屏剔除误判导致整图不绘制（部分环境下 vpt + 坐标偶发异常）
     skipOffscreen: false,
@@ -2352,7 +2424,7 @@ function initFabricIfNeeded() {
   bindFabricUiEvents();
   uiCanvasBackgroundHex.value = colorToHexForInput(EDITOR_DEFAULT_CANVAS_BACKGROUND);
   nextTick(function afterFabricDom() {
-    syncCanvasDisplayScale();
+    syncEditorCanvasDimensions();
     bindCanvasHostResize();
   });
 }

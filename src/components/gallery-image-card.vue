@@ -7,7 +7,7 @@
         <label
           v-if="isOwner"
           class="flex shrink-0 cursor-pointer items-start border-r border-slate-800 bg-slate-900/90 p-2"
-          title="加入视频（仅自己的作品）"
+          title="勾选后加入视频导出顺序；批量删除模式下表示待删除（同一勾选）"
           @click.stop
         >
           <input
@@ -16,20 +16,6 @@
             :checked="videoSelected"
             :disabled="deleting"
             @change="emitToggleVideoSelect"
-          />
-        </label>
-        <label
-          v-if="isOwner && bulkDeleteMode"
-          class="flex shrink-0 cursor-pointer items-start border-r border-slate-800 bg-slate-900/90 p-2"
-          title="勾选以批量删除"
-          @click.stop
-        >
-          <input
-            type="checkbox"
-            class="mt-1 h-4 w-4 rounded border-slate-600 bg-slate-800 text-rose-500 focus:ring-rose-500"
-            :checked="bulkDeleteSelected"
-            :disabled="deleting"
-            @change="emitToggleBulkDeleteSelect"
           />
         </label>
         <div class="relative min-w-0 flex-1">
@@ -94,7 +80,7 @@
                 编辑信息
               </button>
               <button
-                v-if="isOwner && !bulkDeleteMode"
+                v-if="isOwner"
                 type="button"
                 class="text-sm text-rose-400/90 hover:text-rose-300"
                 :disabled="deleting"
@@ -112,7 +98,7 @@
         <label
           v-if="isOwner"
           class="flex shrink-0 cursor-pointer items-start border-r border-slate-800 bg-slate-900/90 p-2"
-          title="加入视频（仅自己的作品）"
+          title="勾选后加入视频导出顺序；批量删除模式下表示待删除（同一勾选）"
           @click.stop
         >
           <input
@@ -121,20 +107,6 @@
             :checked="videoSelected"
             :disabled="deleting"
             @change="emitToggleVideoSelect"
-          />
-        </label>
-        <label
-          v-if="isOwner && bulkDeleteMode"
-          class="flex shrink-0 cursor-pointer items-start border-r border-slate-800 bg-slate-900/90 p-2"
-          title="勾选以批量删除"
-          @click.stop
-        >
-          <input
-            type="checkbox"
-            class="mt-1 h-4 w-4 rounded border-slate-600 bg-slate-800 text-rose-500 focus:ring-rose-500"
-            :checked="bulkDeleteSelected"
-            :disabled="deleting"
-            @change="emitToggleBulkDeleteSelect"
           />
         </label>
         <RouterLink
@@ -183,7 +155,6 @@
             编辑信息
           </button>
           <button
-            v-if="!bulkDeleteMode"
             type="button"
             class="rounded-md border border-rose-900/60 px-2 py-1 text-xs text-rose-400/90 hover:bg-slate-800"
             :disabled="deleting"
@@ -223,9 +194,6 @@ const props = defineProps<{
   videoSelected: boolean;
   /** 自己的作品：可编辑标签、可勾选编入视频（他人公开图跨域无法绘制到 canvas） */
   isOwner: boolean;
-  /** 批量删除模式：显示勾选列，隐藏单张「删除」按钮 */
-  bulkDeleteMode: boolean;
-  bulkDeleteSelected: boolean;
   deleting: boolean;
 }>();
 
@@ -234,7 +202,6 @@ const emit = defineEmits<{
   'toggle-video-select': [image: ImageRow];
   'edit-tags': [image: ImageRow];
   'delete-image': [image: ImageRow];
-  'toggle-bulk-delete-select': [image: ImageRow];
 }>();
 
 const likesCount = computed(function likesCountComputed() {
@@ -255,9 +222,5 @@ function emitEditTags() {
 
 function emitDeleteImage() {
   emit('delete-image', props.image);
-}
-
-function emitToggleBulkDeleteSelect() {
-  emit('toggle-bulk-delete-select', props.image);
 }
 </script>

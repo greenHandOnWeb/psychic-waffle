@@ -52,7 +52,7 @@ export const EXPORT_PIXEL_RATIO = 3;
 
 export const EXPORT_JPEG_QUALITY = 0.92;
 
-/** Fabric 画布逻辑尺寸（用于百分比换算基准） */
+/** 编辑器参考宽高比（4:3）与宿主未就绪时的回退像素；实际画布由编辑器宿主宽度动态计算 */
 export const EDITOR_CANVAS_WIDTH = 800;
 
 export const EDITOR_CANVAS_HEIGHT = 600;
@@ -87,12 +87,16 @@ export const EDITOR_VIEWPORT_MAX_HEIGHT_VH = 72;
  */
 export const FABRIC_TEMPLATE_PLACEHOLDER_PREFIX = 'tpl-ph:';
 
-/** 未套用模板槽位时，新插入图片的默认占位（百分比） */
+/** 新插入图片默认占位宽高（占画布百分比） */
+const EDITOR_DEFAULT_NEW_IMAGE_BOX_W_PCT = 40;
+const EDITOR_DEFAULT_NEW_IMAGE_BOX_H_PCT = 40;
+
+/** 未套用模板槽位时，新插入图片的默认占位（槽位在画布上水平垂直居中） */
 export const EDITOR_DEFAULT_NEW_IMAGE_LAYOUT = {
-  xPct: 10,
-  yPct: 10,
-  wPct: 40,
-  hPct: 40,
+  wPct: EDITOR_DEFAULT_NEW_IMAGE_BOX_W_PCT,
+  hPct: EDITOR_DEFAULT_NEW_IMAGE_BOX_H_PCT,
+  xPct: (100 - EDITOR_DEFAULT_NEW_IMAGE_BOX_W_PCT) / 2,
+  yPct: (100 - EDITOR_DEFAULT_NEW_IMAGE_BOX_H_PCT) / 2,
 } as const;
 
 /** 单图底稿进编辑器时主图区域（忽略 layout 里多槽/拼图坐标，避免仍显示旧拼图槽位） */

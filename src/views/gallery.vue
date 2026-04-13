@@ -70,13 +70,13 @@
               {{ bulkDeleteMode ? '退出批量删除' : '批量删除' }}
             </button>
             <button
-              v-if="bulkDeleteMode && selectedForBulkDeleteIds.length"
+              v-if="bulkDeleteMode && selectedForVideoIds.length"
               type="button"
               class="rounded-lg border border-rose-800 bg-rose-950/40 px-3 py-2 text-sm text-rose-200 hover:bg-rose-950/60 disabled:opacity-50"
               :disabled="deleting"
               @click="onBulkDeleteConfirm"
             >
-              删除选中（{{ selectedForBulkDeleteIds.length }}）
+              删除选中（{{ selectedForVideoIds.length }}）
             </button>
           </template>
           <GenerateVideoControl
@@ -100,14 +100,11 @@
           :liked-by-me="Boolean(likedByMeMap[img.id])"
           :video-selected="selectedForVideoIds.includes(img.id)"
           :is-owner="Boolean(sessionStore.userId && sessionStore.userId === img.user_id)"
-          :bulk-delete-mode="bulkDeleteMode"
-          :bulk-delete-selected="selectedForBulkDeleteIds.includes(img.id)"
           :deleting="deleting"
           @toggle-like="onToggleLike"
           @toggle-video-select="toggleVideoSelect"
           @edit-tags="openTagEditor"
           @delete-image="onDeleteOneImage"
-          @toggle-bulk-delete-select="toggleBulkDeleteSelect"
         />
       </div>
       <p v-if="!loading && !images.length" class="text-slate-500">
@@ -171,9 +168,8 @@ const sessionStore = useSessionStore();
 const selectedForVideoIds = ref<string[]>([]);
 const tagsEditorImage = ref<ImageRow | null>(null);
 const uploadTagsRaw = ref('');
-/** 批量删除：勾选多张后一键删除 */
+/** 批量删除：与导出视频共用同一组勾选（selectedForVideoIds） */
 const bulkDeleteMode = ref(false);
-const selectedForBulkDeleteIds = ref<string[]>([]);
 const deleting = ref(false);
 
 function isCollageItem(img: ImageRow): boolean {
@@ -232,26 +228,6 @@ function pruneVideoSelection() {
   });
 }
 
-function pruneBulkDeleteSelection() {
-  const uid = sessionStore.userId;
-  if (!uid) {
-    selectedForBulkDeleteIds.value = [];
-    return;
-  }
-  const allowed = new Set(
-    images.value
-      .filter(function ownedBulk(r) {
-        return r.user_id === uid;
-      })
-      .map(function idBulk(r) {
-        return r.id;
-      })
-  );
-  selectedForBulkDeleteIds.value = selectedForBulkDeleteIds.value.filter(function keepBulk(id) {
-    return allowed.has(id);
-  });
-}
-
 function onWizardVideoOrder(orderedGalleryIds: string[]) {
   selectedForVideoIds.value = orderedGalleryIds.slice();
 }
@@ -273,23 +249,6 @@ function toggleVideoSelect(img: ImageRow) {
   }
 }
 
-function toggleBulkDeleteSelect(img: ImageRow) {
-  const uid = sessionStore.userId;
-  if (!uid || img.user_id !== uid || deleting.value) {
-    return;
-  }
-  const id = img.id;
-  const cur = selectedForBulkDeleteIds.value;
-  const idx = cur.indexOf(id);
-  if (idx >= 0) {
-    selectedForBulkDeleteIds.value = cur.filter(function notBulkId(x) {
-      return x !== id;
-    });
-  } else {
-    selectedForBulkDeleteIds.value = cur.concat([id]);
-  }
-}
-
 function onDeleteOneImage(img: ImageRow) {
   if (deleting.value) {
     return;
@@ -307,7 +266,7 @@ function onDeleteOneImage(img: ImageRow) {
 }
 
 function onBulkDeleteConfirm() {
-  const ids = selectedForBulkDeleteIds.value.slice();
+  const ids = selectedForVideoIds.value.slice();
   if (!ids.length || deleting.value) {
     return;
   }
@@ -362,9 +321,6 @@ async function runDeleteImages(ids: string[]) {
     return !removed.has(r.id);
   });
   selectedForVideoIds.value = selectedForVideoIds.value.filter(function keepVid(id) {
-    return !removed.has(id);
-  });
-  selectedForBulkDeleteIds.value = selectedForBulkDeleteIds.value.filter(function keepBulkId(id) {
     return !removed.has(id);
   });
   if (tagsEditorImage.value && removed.has(tagsEditorImage.value.id)) {
@@ -461,7 +417,6 @@ async function loadImages() {
     images.value = rows;
     await hydrateLikesForRows(rows);
     pruneVideoSelection();
-    pruneBulkDeleteSelection();
   } catch (e) {
     console.error('[gallery] load images', e);
     toast.error('加载画廊失败');
@@ -644,17 +599,9 @@ watch(
   },
   function onSessionUserChange() {
     pruneVideoSelection();
-    pruneBulkDeleteSelection();
     bulkDeleteMode.value = false;
-    selectedForBulkDeleteIds.value = [];
   }
 );
-
-watch(bulkDeleteMode, function onBulkModeChange(active) {
-  if (!active) {
-    selectedForBulkDeleteIds.value = [];
-  }
-});
 
 onMounted(function galleryMounted() {
   void Promise.all([loadDistinctTags(), loadImages()]);
