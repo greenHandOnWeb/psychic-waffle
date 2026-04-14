@@ -412,5 +412,67 @@
       ]
     },
     "created_at": "2026-04-10T00:00:00.000Z"
+  },
+  {
+    "id": "44444444-4444-4444-8444-444444444444",
+    "name": "竖版分镜长图（示例）",
+    "description": "多段竖向槽位，类似信息流/剪映长模板：逐格替换图片即可；布局仍为百分比坐标，导出为一张整图。",
+    "thumbnail_url": null,
+    "layout": {
+      "version": 1,
+      "elements": [
+        {
+          "id": "tpl-story-1",
+          "src": "https://picsum.photos/seed/tpl-story-1/900/360",
+          "xPct": 5,
+          "yPct": 2,
+          "wPct": 90,
+          "hPct": 17,
+          "zIndex": 1,
+          "rotation": 0
+        },
+        {
+          "id": "tpl-story-2",
+          "src": "https://picsum.photos/seed/tpl-story-2/900/360",
+          "xPct": 5,
+          "yPct": 21,
+          "wPct": 90,
+          "hPct": 17,
+          "zIndex": 2,
+          "rotation": 0
+        },
+        {
+          "id": "tpl-story-3",
+          "src": "https://picsum.photos/seed/tpl-story-3/900/360",
+          "xPct": 5,
+          "yPct": 40,
+          "wPct": 90,
+          "hPct": 17,
+          "zIndex": 3,
+          "rotation": 0
+        },
+        {
+          "id": "tpl-story-4",
+          "src": "https://picsum.photos/seed/tpl-story-4/900/360",
+          "xPct": 5,
+          "yPct": 59,
+          "wPct": 90,
+          "hPct": 17,
+          "zIndex": 4,
+          "rotation": 0
+        },
+        {
+          "id": "tpl-story-5",
+          "src": "https://picsum.photos/seed/tpl-story-5/900/360",
+          "xPct": 5,
+          "yPct": 78,
+          "wPct": 90,
+          "hPct": 18,
+          "zIndex": 5,
+          "rotation": 0
+        }
+      ]
+    },
+    "created_at": "2026-04-13T00:00:00.000Z"
   }
 ]
