@@ -432,8 +432,10 @@ import {
   EDITOR_BG_REMOVE_SUBDIR,
   EDITOR_ROUTE_QUERY_GALLERY_KIND,
   EDITOR_ROUTE_QUERY_PUZZLE_DRAFT,
+  EDITOR_IMAGE_IN_TRASH_TOAST,
   GALLERY_CATEGORY_COLLAGE,
   GALLERY_CATEGORY_SINGLE,
+  buildSharePosterUrl,
   LAYOUT_SCHEMA_VERSION,
   MAX_AUDIO_UPLOAD_BYTES,
   STORAGE_BUCKET,
@@ -1527,13 +1529,14 @@ async function loadCurrentImage() {
       .from('images')
       .select('*')
       .eq('id', imageId.value)
+      .is('deleted_at', null)
       .single();
     if (g !== layoutLoadGeneration) {
       return;
     }
     if (error) {
       console.error('[editor] load image', error);
-      toast.error(error.message || '加载作品失败');
+      toast.error(error.code === 'PGRST116' ? EDITOR_IMAGE_IN_TRASH_TOAST : error.message || '加载作品失败');
       return;
     }
     const row = data as ImageRow;
@@ -1922,7 +1925,7 @@ async function saveLayout() {
     const collageUrl = pub.publicUrl;
     const title = `拼图-${new Date().toLocaleString('zh-CN', { hour12: false })}`;
 
-    const { error: insErr } = await supabase
+    const { data: collageRow, error: insErr } = await supabase
       .from('images')
       .insert({
         user_id: uid,
@@ -1945,7 +1948,32 @@ async function saveLayout() {
       return;
     }
 
-    toast.success('已保存布局，并生成拼图作品（可在画廊「拼图」中查看）');
+    const newCollageId =
+      collageRow && typeof collageRow === 'object' && 'id' in collageRow
+        ? String((collageRow as { id: string }).id)
+        : '';
+    if (newCollageId) {
+      const shareUrl = buildSharePosterUrl(newCollageId);
+      toast.success('已保存布局，并生成拼图作品（可在画廊「拼图」中查看）', {
+        duration: 10000,
+        description: '新拼图已公开，可复制链接分享',
+        action: {
+          label: '复制分享链接',
+          onClick: function onCopyNewCollageShare() {
+            void navigator.clipboard.writeText(shareUrl).then(
+              function onCopyOk() {
+                toast.success('分享链接已复制');
+              },
+              function onCopyFail() {
+                toast.error('复制失败，请从画廊卡片再试');
+              },
+            );
+          },
+        },
+      });
+    } else {
+      toast.success('已保存布局，并生成拼图作品（可在画廊「拼图」中查看）');
+    }
   } catch (e) {
     console.error('[editor] save', e);
     toast.error('保存失败');
@@ -1964,7 +1992,11 @@ async function exportPoster() {
       await document.fonts.ready;
     }
     downloadFabricPosterJpeg(fabricCanvas, `poster-${imageId.value || 'draft'}.jpg`);
-    toast.success('已开始下载海报');
+    toast.success('已开始下载海报', {
+      description:
+        '本地 JPG 下载。若需「链接分享」：请先「保存并生成拼图」，在画廊对公开成品使用「复制分享链接」；在线表单海报规划中。',
+      duration: 9000,
+    });
   } catch (e) {
     console.error('[editor] export', e);
     toast.error('导出失败');
@@ -1987,7 +2019,11 @@ async function exportPosterHtmlWithAudio() {
       audioSegments.value,
       `poster-audio-${imageId.value || 'draft'}`
     );
-    toast.success('已开始下载 HTML（请用浏览器打开；多段音乐会按时间轴叠加播放）');
+    toast.success('已开始下载 HTML（请用浏览器打开；多段音乐会按时间轴叠加播放）', {
+      description:
+        'HTML 为本地文件。公开作品分享链接见画廊「复制分享链接」；后续可扩展为托管链接 + 表单配置。',
+      duration: 10000,
+    });
   } catch (e) {
     console.error('[editor] export html+audio', e);
     toast.error(e instanceof Error ? e.message : '导出 HTML 失败');
