@@ -1,0 +1,659 @@
+<!doctype html>
+<html lang="zh-CN">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=yes" />
+    <title>365·食光小事｜可自添加的美食日历＋日常随机器</title>
+    <style>
+      * {
+        margin: 0;
+        padding: 0;
+        box-sizing: border-box;
+      }
+
+      body {
+        background: linear-gradient(145deg, #fef5e8 0%, #fee9db 100%);
+        font-family:
+          system-ui,
+          -apple-system,
+          'Segoe UI',
+          'Roboto',
+          'Helvetica Neue',
+          sans-serif;
+        padding: 1.5rem;
+        min-height: 100vh;
+      }
+
+      .container {
+        max-width: 1300px;
+        margin: 0 auto;
+      }
+
+      /* 双列布局 */
+      .cards-grid {
+        display: grid;
+        grid-template-columns: 1fr 1fr;
+        gap: 2rem;
+      }
+
+      @media (max-width: 800px) {
+        .cards-grid {
+          grid-template-columns: 1fr;
+          gap: 1.8rem;
+        }
+      }
+
+      /* 卡片通用样式 */
+      .card {
+        background: rgba(255, 252, 245, 0.96);
+        backdrop-filter: blur(2px);
+        border-radius: 2rem;
+        padding: 1.6rem;
+        box-shadow: 0 20px 35px -12px rgba(0, 0, 0, 0.2);
+        border: 1px solid #ffe7cf;
+        transition: all 0.2s;
+        display: flex;
+        flex-direction: column;
+      }
+
+      .card-header {
+        display: flex;
+        align-items: baseline;
+        justify-content: space-between;
+        flex-wrap: wrap;
+        border-bottom: 2px dashed #ffdbb5;
+        padding-bottom: 0.7rem;
+        margin-bottom: 1.3rem;
+      }
+
+      .title-box {
+        display: flex;
+        align-items: center;
+        gap: 10px;
+        flex-wrap: wrap;
+      }
+
+      .title-box h2 {
+        font-size: 1.8rem;
+        font-weight: 700;
+        color: #b45309;
+      }
+
+      .count-chip {
+        background: #f1dfcf;
+        border-radius: 40px;
+        padding: 0.2rem 0.8rem;
+        font-size: 0.75rem;
+        font-weight: 600;
+        color: #9b5a2c;
+      }
+
+      .result-area {
+        background: #fff8f0;
+        border-radius: 1.8rem;
+        padding: 1.2rem;
+        margin: 0.8rem 0;
+        text-align: center;
+        box-shadow:
+          inset 0 1px 2px #0001,
+          0 6px 12px -8px rgba(0, 0, 0, 0.1);
+      }
+
+      .result-text {
+        font-size: 1.4rem;
+        font-weight: 600;
+        color: #883f16;
+        line-height: 1.4;
+        word-break: break-word;
+      }
+
+      .badge-light {
+        font-size: 0.7rem;
+        color: #b57248;
+        margin-top: 0.4rem;
+      }
+
+      .button-group {
+        display: flex;
+        flex-wrap: wrap;
+        gap: 10px;
+        justify-content: center;
+        margin: 12px 0 12px;
+      }
+
+      button {
+        background: #e57c2c;
+        border: none;
+        padding: 0.5rem 1.2rem;
+        font-size: 0.85rem;
+        font-weight: 500;
+        border-radius: 60px;
+        color: white;
+        cursor: pointer;
+        transition: 0.15s;
+        display: inline-flex;
+        align-items: center;
+        gap: 6px;
+        box-shadow: 0 1px 2px rgba(0, 0, 0, 0.05);
+      }
+
+      button.sec {
+        background: #dd9f6c;
+      }
+
+      button.small {
+        background: #bda58b;
+        padding: 0.4rem 1rem;
+        font-size: 0.8rem;
+      }
+
+      button:hover {
+        background: #c95f1a;
+        transform: scale(0.96);
+      }
+
+      .add-section {
+        margin-top: 1rem;
+        background: #fef3e8;
+        border-radius: 1.5rem;
+        padding: 0.9rem;
+        display: flex;
+        flex-wrap: wrap;
+        gap: 8px;
+        align-items: center;
+      }
+
+      .add-section input {
+        flex: 2;
+        min-width: 140px;
+        padding: 0.6rem 0.9rem;
+        border-radius: 60px;
+        border: 1px solid #ffd8b5;
+        background: white;
+        font-size: 0.85rem;
+        outline: none;
+      }
+
+      .add-section input:focus {
+        border-color: #e57c2c;
+      }
+
+      .history-log {
+        margin-top: 1rem;
+        font-size: 0.75rem;
+        color: #ad7a52;
+        background: #fff3e7;
+        border-radius: 1.2rem;
+        padding: 0.5rem 1rem;
+      }
+
+      hr {
+        margin: 0.5rem 0;
+        border: none;
+        border-top: 1px solid #ffdfc0;
+      }
+
+      .footer-note {
+        text-align: center;
+        font-size: 0.7rem;
+        color: #c28f64;
+        margin-top: 2rem;
+      }
+    </style>
+  </head>
+  <body>
+    <div class="container">
+      <div class="cards-grid">
+        <!-- 左侧：美食卡片 -->
+        <div class="card" id="foodCard">
+          <div class="card-header">
+            <div class="title-box">
+              <h2>🍜 美食 365</h2>
+              <span class="count-chip" id="foodCountLabel">0 道美味</span>
+            </div>
+            <span class="count-chip">✨ 可自添加</span>
+          </div>
+          <div class="result-area">
+            <div class="result-text" id="foodDisplay">🌮 点击随机或今日推荐</div>
+            <div class="badge-light" id="foodHint"></div>
+          </div>
+          <div class="button-group">
+            <button id="randomFoodBtn">🎲 随机美食</button>
+            <button id="todayFoodBtn" class="sec">📅 今日推荐美食</button>
+          </div>
+          <div class="add-section">
+            <input
+              type="text"
+              id="newFoodInput"
+              placeholder="例：🍣 三文鱼茶泡饭 / 烤红薯"
+              autocomplete="off"
+            />
+            <button id="addFoodBtn" class="small">➕ 添加美食</button>
+            <button id="resetFoodProgress" class="small" style="background: #c1a082">
+              🔄 重置本轮记录
+            </button>
+          </div>
+          <div class="history-log" id="foodHistoryLog">📋 最近美食记录：暂无</div>
+        </div>
+
+        <!-- 右侧：小事卡片 -->
+        <div class="card" id="taskCard">
+          <div class="card-header">
+            <div class="title-box">
+              <h2>✨ 小事 365</h2>
+              <span class="count-chip" id="taskCountLabel">0 件小事</span>
+            </div>
+            <span class="count-chip">💡 可自添加</span>
+          </div>
+          <div class="result-area">
+            <div class="result-text" id="taskDisplay">📌 点击随机或今日灵感</div>
+            <div class="badge-light" id="taskHint"></div>
+          </div>
+          <div class="button-group">
+            <button id="randomTaskBtn">🎲 随机小事</button>
+            <button id="todayTaskBtn" class="sec">📅 今日推荐小事</button>
+          </div>
+          <div class="add-section">
+            <input
+              type="text"
+              id="newTaskInput"
+              placeholder="例：📞 给老朋友打一通电话"
+              autocomplete="off"
+            />
+            <button id="addTaskBtn" class="small">➕ 添加小事</button>
+            <button id="resetTaskProgress" class="small" style="background: #c1a082">
+              🔄 重置本轮记录
+            </button>
+          </div>
+          <div class="history-log" id="taskHistoryLog">📋 最近小事记录：暂无</div>
+        </div>
+      </div>
+      <div class="footer-note">
+        🌟 所有添加的美食和小事都会自动保存，计数无限制，向着365目标慢慢收集吧。<br />
+        💡
+        “今日推荐”根据当前日期(月/日)生成，保证每日不同；随机抽取会优先抽未选过的，全部抽完后自动循环。
+      </div>
+    </div>
+
+    <script>
+      // ---------- 初始化存储结构 ----------
+      // 美食库
+      let foodList = [];
+      // 小事库
+      let taskList = [];
+
+      // 本轮已选过的美食（用于随机抽取时优先未选过）
+      let foodSelectedSet = new Set();
+      let taskSelectedSet = new Set();
+
+      // 历史记录（最多展示5条）
+      let foodHistory = [];
+      let taskHistory = [];
+
+      // ---------- 预置美食数据（80+，风格多样，大家可以继续加）----------
+      const defaultFoods = [
+        '🍜 兰州牛肉面',
+        '🍚 隆江猪脚饭',
+        '🍛 咖喱鸡乌冬',
+        '🍲 东北铁锅炖',
+        '🍕 玛格丽特披萨',
+        '🍔 和牛汉堡',
+        '🍣 三文鱼腩寿司',
+        '🥟 虾仁蒸饺',
+        '🍢 关东煮大根',
+        '🍝 白葡萄酒蛤蜊意面',
+        '🥘 韩式部队锅',
+        '🌮 墨西哥塔可',
+        '🍜 日式味增拉面',
+        '🥗 泰式青木瓜沙拉',
+        '🍛 越南河粉',
+        '🍚 卤肉饭',
+        '🍗 脆皮烧鹅饭',
+        '🐟 清蒸鲈鱼',
+        '🍤 天妇罗定食',
+        '🍡 章鱼小丸子',
+        '🥘 冬阴功汤',
+        '🍝 罗勒青酱意面',
+        '🍕 榴莲披萨',
+        '🌯 鸡肉凯撒卷',
+        '🍱 照烧鸡排便当',
+        '🍙 鲑鱼饭团',
+        '🥣 皮蛋瘦肉粥',
+        '🍲 砂锅鱼头',
+        '🍜 新疆大盘鸡拌面',
+        '🍚 海南鸡饭',
+        '🍲 佛跳墙（家庭版）',
+        '🌮 牛舌塔可',
+        '🍣 鳗鱼饭',
+        '🍛 姜汁烧肉定食',
+        '🍢 炸串拼盘',
+        '🍝 海鲜墨鱼面',
+        '🥟 锅贴',
+        '🍳 滑蛋虾仁盖饭',
+        '🍚 西班牙海鲜饭',
+        '🍲 花胶鸡火锅',
+        '🧆 鹰嘴豆泥配皮塔',
+        '🥙 烤肉卷',
+        '🍜 贵阳肠旺面',
+        '🥟 红油抄手',
+        '🍛 日式咖喱猪排饭',
+        '🍕 意式辣香肠披萨',
+        '🍄 松露烩饭',
+        '🍤 清炒虾仁',
+        '🍲 毛血旺',
+        '🍜 重庆小面',
+        '🍱 寿司拼盘',
+        '🥗 煎牛排沙拉',
+        '🍛 泰式绿咖喱鸡',
+        '🍲 酸菜鱼',
+        '🍙 紫菜包饭',
+        '🍜 武汉热干面',
+        '🍚 煲仔饭',
+        '🍝 番茄肉酱意面',
+        '🌯 素食卷',
+        '🍔 芝士蘑菇堡',
+        '🍜 延吉冷面',
+        '🍲 羊蝎子',
+        '🍳 日式蛋包饭',
+        '🍛 奶油炖菜',
+        '🥘 麻辣干锅',
+        '🍣 火山卷',
+        '🍜 湘西米粉',
+        '🍚 咖喱炒饭',
+        '🍕 水果披萨',
+        '🍲 椰子鸡火锅',
+        '🥟 水晶虾饺',
+        '🍡 烤红薯',
+        '🍦 焦糖冰淇淋',
+        '🍰 巴斯克芝士蛋糕',
+        '🍧 绵绵冰',
+      ];
+
+      // 预置小事数据 (80+件有趣、治愈、行动导向)
+      const defaultTasks = [
+        '📖 读5页一直想看的那本书',
+        '☕ 给自己冲一杯手冲咖啡',
+        '🎧 听一集播客',
+        '🧹 整理书桌5分钟',
+        '🌿 给绿植浇水',
+        '📝 写下今日小确幸',
+        '🧘 做一次深呼吸冥想',
+        '🎨 随意涂鸦3分钟',
+        '📸 拍一张天空照片',
+        '💌 给朋友发一句想念',
+        '🧦 换洗床单',
+        '🕯️ 点香薰放松',
+        '🎵 学唱一段新歌',
+        '📞 给父母打个电话',
+        '📚 淘汰几本旧书',
+        '🏃 拉伸2分钟',
+        '🍎 吃一种不常吃的水果',
+        '📺 看一集短动画',
+        '💡 写下明天的一个小目标',
+        '🎲 玩一局数独',
+        '💬 夸自己一句',
+        '🧠 记两个新单词',
+        '🍳 烹饪一道新菜',
+        '🌙 提前30分钟放下手机',
+        '👖 尝试搭配一套新衣服',
+        '✉️ 给未来的自己写一句话',
+        '🎬 重温电影经典片段',
+        '🧩 完成一个小拼图',
+        '📊 记录今日开支',
+        '🎁 为自己买小礼物',
+        '☀️ 晒太阳10分钟',
+        '🧹 吸尘/扫地',
+        '📖 了解一个冷知识',
+        '🎯 列出明日待办',
+        '💧 喝够八杯水',
+        '📝 感恩日记三行',
+        '🧘‍♀️ 靠墙站立5分钟',
+        '🕰️ 早睡20分钟',
+        '💌 称赞一位同事',
+        '🖋️ 手写一段随笔',
+        '🎧 听一首从未听过的歌',
+        '🪴 修剪植物枯叶',
+        '📌 清理电脑桌面',
+        '🔋 整理手机相册',
+        '🎭 模仿一种动物叫声',
+        '🍪 烤制小饼干',
+        '🎈 吹一颗气球',
+        '📮 回复一封旧邮件',
+        '🧺 洗衣服并叠好',
+        '🪞 对镜子微笑',
+        '🌸 闻一闻花香',
+        '🕯️ 关灯冥想',
+        '🎲 随机点一份外卖',
+        '🧹 清洁键盘',
+        '☔ 雨中散步',
+        '📹 拍10秒Vlog',
+        '🎨 调色练习',
+        '💆 按摩太阳穴',
+        '🧠 玩记忆游戏',
+        '📚 图书馆借书',
+        '🎭 看戏剧预告',
+        '📦 捐赠闲置物品',
+        '🧥 刷鞋一双',
+        '🍲 煲汤',
+        '📝 写周计划',
+        '🧩 拼乐高',
+        '🎤 唱K一小段',
+        '🧵 缝补衣物',
+        '📖 朗读诗歌',
+        '🥗 制作轻食',
+        '💤 午睡20分钟',
+      ];
+
+      // ---------- 辅助函数 -------------
+      function loadFromLocalStorage() {
+        const storedFood = localStorage.getItem('MY365_foodList');
+        if (storedFood) {
+          foodList = JSON.parse(storedFood);
+        } else {
+          foodList = [...defaultFoods];
+        }
+        const storedTask = localStorage.getItem('MY365_taskList');
+        if (storedTask) {
+          taskList = JSON.parse(storedTask);
+        } else {
+          taskList = [...defaultTasks];
+        }
+
+        const foodSelectedRaw = localStorage.getItem('MY365_foodSelected');
+        if (foodSelectedRaw) {
+          foodSelectedSet = new Set(JSON.parse(foodSelectedRaw));
+        } else {
+          foodSelectedSet.clear();
+        }
+        const taskSelectedRaw = localStorage.getItem('MY365_taskSelected');
+        if (taskSelectedRaw) {
+          taskSelectedSet = new Set(JSON.parse(taskSelectedRaw));
+        } else {
+          taskSelectedSet.clear();
+        }
+
+        const foodHist = localStorage.getItem('MY365_foodHistory');
+        if (foodHist) foodHistory = JSON.parse(foodHist);
+        else foodHistory = [];
+        const taskHist = localStorage.getItem('MY365_taskHistory');
+        if (taskHist) taskHistory = JSON.parse(taskHist);
+        else taskHistory = [];
+      }
+
+      function saveToLocalStorage() {
+        localStorage.setItem('MY365_foodList', JSON.stringify(foodList));
+        localStorage.setItem('MY365_taskList', JSON.stringify(taskList));
+        localStorage.setItem('MY365_foodSelected', JSON.stringify([...foodSelectedSet]));
+        localStorage.setItem('MY365_taskSelected', JSON.stringify([...taskSelectedSet]));
+        localStorage.setItem('MY365_foodHistory', JSON.stringify(foodHistory.slice(0, 6)));
+        localStorage.setItem('MY365_taskHistory', JSON.stringify(taskHistory.slice(0, 6)));
+        updateUI();
+      }
+
+      function updateUI() {
+        // 更新计数
+        document.getElementById('foodCountLabel').innerText = `${foodList.length} 道美食`;
+        document.getElementById('taskCountLabel').innerText = `${taskList.length} 件小事`;
+
+        // 可选展示进度：已选 / 总数
+        const foodProgress = foodSelectedSet.size;
+        const taskProgress = taskSelectedSet.size;
+        document.getElementById('foodHint').innerHTML =
+          `🍻 本轮已尝过 ${foodProgress} 种 / 共 ${foodList.length}`;
+        document.getElementById('taskHint').innerHTML =
+          `✨ 本轮已完成 ${taskProgress} 件 / 共 ${taskList.length}`;
+
+        // 更新历史显示
+        let foodHtml = foodHistory.length
+          ? foodHistory
+              .slice(0, 5)
+              .map((i) => `🍥 ${i}`)
+              .join(' · ')
+          : '暂无';
+        document.getElementById('foodHistoryLog').innerHTML = `📋 最近美食：${foodHtml}`;
+        let taskHtml = taskHistory.length
+          ? taskHistory
+              .slice(0, 5)
+              .map((i) => `✨ ${i}`)
+              .join(' · ')
+          : '暂无';
+        document.getElementById('taskHistoryLog').innerHTML = `📋 最近小事：${taskHtml}`;
+      }
+
+      // 随机抽取（优先未选过）
+      function getRandomUnseenItem(list, selectedSet) {
+        if (!list.length) return null;
+        const unseen = list.filter((_, idx) => !selectedSet.has(idx));
+        if (unseen.length === 0) {
+          // 全部选过了，清空本轮记录，重新循环
+          selectedSet.clear();
+          return list[Math.floor(Math.random() * list.length)];
+        }
+        return unseen[Math.floor(Math.random() * unseen.length)];
+      }
+
+      // 今日推荐（基于日期+总数求模稳定映射）
+      function getTodayItem(list) {
+        if (!list.length) return null;
+        const today = new Date();
+        const dayOfYear = Math.floor((today - new Date(today.getFullYear(), 0, 0)) / 86400000);
+        const idx = dayOfYear % list.length;
+        return list[idx];
+      }
+
+      function addItemToList(list, setRef, newItem, storageKey, itemType) {
+        if (!newItem.trim()) return false;
+        list.push(newItem.trim());
+        // 新加入的条目默认未选过，不改变setRef内容（保持原有已选记录索引不变，新索引自然未选）
+        saveToLocalStorage();
+        return true;
+      }
+
+      function recordHistory(historyArray, item, maxLen = 5) {
+        historyArray.unshift(item);
+        if (historyArray.length > maxLen) historyArray.pop();
+      }
+
+      // 随机并记录
+      function randomAndRecord(list, selectedSet, historyArray, displayElement, type) {
+        if (!list.length) {
+          displayElement.innerText = '✨ 暂无内容，请先添加～';
+          return;
+        }
+        const chosen = getRandomUnseenItem(list, selectedSet);
+        if (chosen) {
+          displayElement.innerText = chosen;
+          // 标记已选：需要找到索引
+          const idx = list.indexOf(chosen);
+          if (idx !== -1) selectedSet.add(idx);
+          recordHistory(historyArray, chosen);
+          saveToLocalStorage();
+        } else {
+          displayElement.innerText = '🎉 全部体验过了！已重置！继续享受吧';
+        }
+      }
+
+      function todayAndRecord(list, historyArray, displayElement, type) {
+        if (!list.length) {
+          displayElement.innerText = '🌱 还没有任何内容，添加一点吧';
+          return;
+        }
+        const chosen = getTodayItem(list);
+        if (chosen) {
+          displayElement.innerText = chosen;
+          //   recordHistory(historyArray, chosen);
+          // 今日推荐不强制标记为“已选”，但仍可单独标记？为了保持随机抽取的独立性，今日推荐不自动占用“未选”名额（用户可手动重置）
+          // 但为了体验，我们可以让今日推荐也加入已选? 不，今日推荐仅推荐，不影响随机池的“已选”计数（用户需求差异）。保持两套逻辑独立
+          // 此处仅记录历史
+          //   saveToLocalStorage();
+        } else {
+          displayElement.innerText = '🙌 暂无数据';
+        }
+      }
+
+      function resetSelection(setRef, type) {
+        setRef.clear();
+        saveToLocalStorage();
+        alert(`✨ 已重置“${type}”随机记录, 现在所有选项可再次被随机抽中`);
+      }
+
+      // ---------- 页面初始化绑定 ----------
+      window.onload = () => {
+        loadFromLocalStorage();
+        updateUI();
+
+        // 美食控件
+        const randomFoodBtn = document.getElementById('randomFoodBtn');
+        const todayFoodBtn = document.getElementById('todayFoodBtn');
+        const addFoodBtn = document.getElementById('addFoodBtn');
+        const newFoodInput = document.getElementById('newFoodInput');
+        const resetFoodProgress = document.getElementById('resetFoodProgress');
+        const foodDisplay = document.getElementById('foodDisplay');
+
+        const randomTaskBtn = document.getElementById('randomTaskBtn');
+        const todayTaskBtn = document.getElementById('todayTaskBtn');
+        const addTaskBtn = document.getElementById('addTaskBtn');
+        const newTaskInput = document.getElementById('newTaskInput');
+        const resetTaskProgress = document.getElementById('resetTaskProgress');
+        const taskDisplay = document.getElementById('taskDisplay');
+
+        randomFoodBtn.onclick = () =>
+          randomAndRecord(foodList, foodSelectedSet, foodHistory, foodDisplay, '美食');
+        todayFoodBtn.onclick = () => todayAndRecord(foodList, foodHistory, foodDisplay, '美食');
+        addFoodBtn.onclick = () => {
+          const val = newFoodInput.value.trim();
+          if (val) {
+            addItemToList(foodList, foodSelectedSet, val, 'food', '美食');
+            newFoodInput.value = '';
+            updateUI();
+            foodDisplay.innerText = `➕ 已添加：“${val}”，总数 ${foodList.length}`;
+          } else {
+            alert('请输入美食名称（可加emoji）');
+          }
+        };
+        resetFoodProgress.onclick = () => resetSelection(foodSelectedSet, '美食');
+
+        randomTaskBtn.onclick = () =>
+          randomAndRecord(taskList, taskSelectedSet, taskHistory, taskDisplay, '小事');
+        todayTaskBtn.onclick = () => todayAndRecord(taskList, taskHistory, taskDisplay, '小事');
+        addTaskBtn.onclick = () => {
+          const val = newTaskInput.value.trim();
+          if (val) {
+            addItemToList(taskList, taskSelectedSet, val, 'task', '小事');
+            newTaskInput.value = '';
+            updateUI();
+            taskDisplay.innerText = `✨ 已添加：“${val}”，总数 ${taskList.length}`;
+          } else {
+            alert('请输入一件小事～');
+          }
+        };
+        resetTaskProgress.onclick = () => resetSelection(taskSelectedSet, '小事');
+
+        // 初始展示一下今日美食与小事（可选，给个预览）
+        if (foodList.length) foodDisplay.innerText = getTodayItem(foodList);
+        if (taskList.length) taskDisplay.innerText = getTodayItem(taskList);
+        updateUI();
+      };
+    </script>
+  </body>
+</html>
