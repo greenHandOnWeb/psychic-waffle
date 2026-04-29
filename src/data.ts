@@ -33,6 +33,12 @@ export const RUNTIME_SUPABASE_MOCK_MODE_OPTIONS: {
 
 export const STORAGE_BUCKET = 'gallery-images';
 
+/** 浏览器标签默认标题后缀（与分享页、路由标题一致） */
+export const DEFAULT_SITE_DOC_TITLE = '灵动画册';
+
+/** 画廊标签筛选变更后延迟拉列表（毫秒），减少短时间内重复请求 */
+export const GALLERY_TAG_FILTER_DEBOUNCE_MS = 320;
+
 /** Mock 模式下模拟网络延迟（毫秒） */
 export const MOCK_NETWORK_DELAY_MS = 500;
 
@@ -182,6 +188,21 @@ export const GALLERY_DELETE_ONE_CONFIRM = '确定删除作品「{title}」？删
 /** 批量删除确认（占位符 {n} 为数量） */
 export const GALLERY_DELETE_BATCH_CONFIRM = '确定删除已选的 {n} 张作品？删除后不可恢复。';
 
+/** 移入回收站（软删除） */
+export const GALLERY_SOFT_DELETE_ONE_CONFIRM =
+  '将「{title}」移入回收站？可在「回收站」中恢复或彻底删除。';
+
+export const GALLERY_SOFT_DELETE_BATCH_CONFIRM = '将已选的 {n} 张作品移入回收站？';
+
+export const GALLERY_RESTORE_ONE_CONFIRM = '恢复作品「{title}」到画廊？';
+
+export const GALLERY_PURGE_ONE_CONFIRM = '永久删除「{title}」？不可恢复，存储中的文件也会被删除。';
+
+export const GALLERY_PURGE_TRASH_CONFIRM = '清空回收站？共 {n} 张将永久删除且不可恢复。';
+
+/** 编辑器加载到已软删作品时提示 */
+export const EDITOR_IMAGE_IN_TRASH_TOAST = '该作品在回收站中，请先在画廊「回收站」中恢复后再编辑。';
+
 /** 画布幻灯导出 WebM：逻辑分辨率（16:9，与预览比例一致、像素更高） */
 export const VIDEO_EXPORT_WIDTH = 1920;
 
@@ -219,3 +240,19 @@ export const VIDEO_SLIDE_SECONDS_MAX = 15;
 
 /** Internet Archive 音频搜索每次返回条数上限 */
 export const ARCHIVE_AUDIO_SEARCH_ROWS = 12;
+
+/** 公开作品分享页路由名（与 `router` 中 `/s/:id` 对应） */
+export const SHARE_POSTER_ROUTE_NAME = 'share-poster';
+
+/**
+ * 生成当前站点下「公开作品」分享页完整 URL（用于复制；需作品 `is_public` 且存在 `public_url`）。
+ */
+export function buildSharePosterUrl(imageId: string): string {
+  const id = (imageId || '').trim();
+  const baseTrim = (import.meta.env.BASE_URL || '/').replace(/\/+$/, '');
+  const path = (baseTrim ? `${baseTrim}/s` : '/s') + `/${encodeURIComponent(id)}`;
+  if (typeof window === 'undefined') {
+    return path;
+  }
+  return new URL(path, window.location.origin).href;
+}

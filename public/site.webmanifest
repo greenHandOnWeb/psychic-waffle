@@ -1,0 +1,35 @@
+{
+  "id": "/",
+  "name": "灵动画册",
+  "short_name": "灵动画册",
+  "description": "图片拼图、画廊与海报分享",
+  "start_url": "/",
+  "scope": "/",
+  "display": "standalone",
+  "background_color": "#020617",
+  "theme_color": "#020617",
+  "lang": "zh-CN",
+  "categories": ["photography", "lifestyle", "entertainment"],
+  "shortcuts": [
+    {
+      "name": "画廊",
+      "short_name": "画廊",
+      "description": "浏览与上传作品",
+      "url": "/"
+    },
+    {
+      "name": "拼图编辑",
+      "short_name": "编辑",
+      "description": "打开拼图编辑器",
+      "url": "/editor"
+    }
+  ],
+  "icons": [
+    {
+      "src": "/vite.svg",
+      "sizes": "any",
+      "type": "image/svg+xml",
+      "purpose": "any"
+    }
+  ]
+}

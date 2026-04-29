@@ -474,5 +474,221 @@
       ]
     },
     "created_at": "2026-04-13T00:00:00.000Z"
+  },
+  {
+    "id": "55555555-5555-4555-8555-555555555555",
+    "name": "六宫格分镜（2×3）",
+    "description": "六张图等分网格，适合多图长模板；逐格替换即可。",
+    "thumbnail_url": null,
+    "layout": {
+      "version": 1,
+      "elements": [
+        {
+          "id": "tpl-grid-6a",
+          "src": "https://picsum.photos/seed/tpl-grid-6a/400/400",
+          "xPct": 4,
+          "yPct": 4,
+          "wPct": 28,
+          "hPct": 28,
+          "zIndex": 1,
+          "rotation": 0
+        },
+        {
+          "id": "tpl-grid-6b",
+          "src": "https://picsum.photos/seed/tpl-grid-6b/400/400",
+          "xPct": 36,
+          "yPct": 4,
+          "wPct": 28,
+          "hPct": 28,
+          "zIndex": 2,
+          "rotation": 0
+        },
+        {
+          "id": "tpl-grid-6c",
+          "src": "https://picsum.photos/seed/tpl-grid-6c/400/400",
+          "xPct": 68,
+          "yPct": 4,
+          "wPct": 28,
+          "hPct": 28,
+          "zIndex": 3,
+          "rotation": 0
+        },
+        {
+          "id": "tpl-grid-6d",
+          "src": "https://picsum.photos/seed/tpl-grid-6d/400/400",
+          "xPct": 4,
+          "yPct": 36,
+          "wPct": 28,
+          "hPct": 28,
+          "zIndex": 4,
+          "rotation": 0
+        },
+        {
+          "id": "tpl-grid-6e",
+          "src": "https://picsum.photos/seed/tpl-grid-6e/400/400",
+          "xPct": 36,
+          "yPct": 36,
+          "wPct": 28,
+          "hPct": 28,
+          "zIndex": 5,
+          "rotation": 0
+        },
+        {
+          "id": "tpl-grid-6f",
+          "src": "https://picsum.photos/seed/tpl-grid-6f/400/400",
+          "xPct": 68,
+          "yPct": 36,
+          "wPct": 28,
+          "hPct": 28,
+          "zIndex": 6,
+          "rotation": 0
+        }
+      ]
+    },
+    "created_at": "2026-04-13T00:00:00.000Z"
+  },
+  {
+    "id": "c3c3c3c3-c3c3-43c3-c3c3-c3c3c3c3c3c3",
+    "name": "竖版七段长图（信息流）",
+    "description": "七条横向分镜自上而下拼接，适合游记、菜单或产品长页；与「竖版分镜长图」同为剪映式长模板，导出为一张整图。",
+    "thumbnail_url": null,
+    "layout": {
+      "version": 1,
+      "elements": [
+        {
+          "id": "tpl-strip-1",
+          "src": "https://picsum.photos/seed/tpl-strip-1/900/200",
+          "xPct": 2,
+          "yPct": 2,
+          "wPct": 96,
+          "hPct": 12,
+          "zIndex": 1,
+          "rotation": 0
+        },
+        {
+          "id": "tpl-strip-2",
+          "src": "https://picsum.photos/seed/tpl-strip-2/900/200",
+          "xPct": 2,
+          "yPct": 16,
+          "wPct": 96,
+          "hPct": 12,
+          "zIndex": 2,
+          "rotation": 0
+        },
+        {
+          "id": "tpl-strip-3",
+          "src": "https://picsum.photos/seed/tpl-strip-3/900/200",
+          "xPct": 2,
+          "yPct": 30,
+          "wPct": 96,
+          "hPct": 12,
+          "zIndex": 3,
+          "rotation": 0
+        },
+        {
+          "id": "tpl-strip-4",
+          "src": "https://picsum.photos/seed/tpl-strip-4/900/200",
+          "xPct": 2,
+          "yPct": 44,
+          "wPct": 96,
+          "hPct": 12,
+          "zIndex": 4,
+          "rotation": 0
+        },
+        {
+          "id": "tpl-strip-5",
+          "src": "https://picsum.photos/seed/tpl-strip-5/900/200",
+          "xPct": 2,
+          "yPct": 58,
+          "wPct": 96,
+          "hPct": 12,
+          "zIndex": 5,
+          "rotation": 0
+        },
+        {
+          "id": "tpl-strip-6",
+          "src": "https://picsum.photos/seed/tpl-strip-6/900/200",
+          "xPct": 2,
+          "yPct": 72,
+          "wPct": 96,
+          "hPct": 12,
+          "zIndex": 6,
+          "rotation": 0
+        },
+        {
+          "id": "tpl-strip-7",
+          "src": "https://picsum.photos/seed/tpl-strip-7/900/200",
+          "xPct": 2,
+          "yPct": 86,
+          "wPct": 96,
+          "hPct": 12,
+          "zIndex": 7,
+          "rotation": 0
+        }
+      ]
+    },
+    "created_at": "2026-04-13T00:00:00.000Z"
+  },
+  {
+    "id": "b5b5b5b5-b5b5-45b5-b5b5-b5b5b5b5b5b5",
+    "name": "剪映式：顶图+四宫格",
+    "description": "上方整幅主视觉，下方 2×2 四格替换图，适合封面+详情多图；导出为一张整图。",
+    "thumbnail_url": null,
+    "layout": {
+      "version": 1,
+      "elements": [
+        {
+          "id": "tpl-hero-top",
+          "src": "https://picsum.photos/seed/tpl-hero-top/960/520",
+          "xPct": 4,
+          "yPct": 2,
+          "wPct": 92,
+          "hPct": 46,
+          "zIndex": 1,
+          "rotation": 0
+        },
+        {
+          "id": "tpl-quad-a",
+          "src": "https://picsum.photos/seed/tpl-quad-a/480/360",
+          "xPct": 4,
+          "yPct": 50,
+          "wPct": 44,
+          "hPct": 23,
+          "zIndex": 2,
+          "rotation": 0
+        },
+        {
+          "id": "tpl-quad-b",
+          "src": "https://picsum.photos/seed/tpl-quad-b/480/360",
+          "xPct": 52,
+          "yPct": 50,
+          "wPct": 44,
+          "hPct": 23,
+          "zIndex": 3,
+          "rotation": 0
+        },
+        {
+          "id": "tpl-quad-c",
+          "src": "https://picsum.photos/seed/tpl-quad-c/480/360",
+          "xPct": 4,
+          "yPct": 75,
+          "wPct": 44,
+          "hPct": 23,
+          "zIndex": 4,
+          "rotation": 0
+        },
+        {
+          "id": "tpl-quad-d",
+          "src": "https://picsum.photos/seed/tpl-quad-d/480/360",
+          "xPct": 52,
+          "yPct": 75,
+          "wPct": 44,
+          "hPct": 23,
+          "zIndex": 5,
+          "rotation": 0
+        }
+      ]
+    },
+    "created_at": "2026-04-13T00:00:00.000Z"
   }
 ]

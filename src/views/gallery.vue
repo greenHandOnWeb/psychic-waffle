@@ -3,13 +3,16 @@
     <section class="rounded-xl border border-slate-800 bg-slate-900/60 p-6">
       <h2 class="mb-2 text-lg font-medium text-white">上传图片</h2>
       <p class="mb-4 text-sm text-slate-400">
-        上传的素材会进入<strong class="text-slate-200">单图画廊</strong>，可进入编辑器排版；在编辑器中「保存并生成拼图」后，成品出现在<strong
+        上传的素材会进入<strong class="text-slate-200">单图画廊</strong
+        >，可进入编辑器排版；在编辑器中「保存并生成拼图」后，成品出现在<strong
           class="text-slate-200"
           >拼图画廊</strong
         >。
       </p>
       <label class="mb-3 block text-sm text-slate-400">
-        <span class="mb-1 block text-xs">自定义标签（可选，逗号或空格分隔，将与 AI 猜标合并去重）</span>
+        <span class="mb-1 block text-xs"
+          >自定义标签（可选，逗号或空格分隔，将与 AI 猜标合并去重）</span
+        >
         <input
           v-model="uploadTagsRaw"
           type="text"
@@ -41,7 +44,7 @@
         <h2 class="text-lg font-medium text-white">画廊</h2>
         <div class="inline-flex rounded-lg border border-slate-700 bg-slate-900 p-0.5 text-sm">
           <button
-            v-for="tab in galleryTabs"
+            v-for="tab in galleryTabsVisible"
             :key="tab.value"
             type="button"
             class="rounded-md px-3 py-1.5 font-medium transition-colors"
@@ -55,10 +58,26 @@
             {{ tab.label }}
           </button>
         </div>
+        <button
+          v-if="galleryTab === 'trash' && sessionStore.userId && images.length && !loading"
+          type="button"
+          class="rounded-lg border border-rose-900/70 bg-rose-950/30 px-3 py-1.5 text-sm text-rose-200 hover:bg-rose-950/50 disabled:opacity-50"
+          :disabled="deleting"
+          @click="onEmptyTrashConfirm"
+        >
+          清空回收站
+        </button>
       </div>
 
-      <div class="mb-4 flex flex-wrap items-end justify-between gap-4">
-        <GalleryTagFilter v-model="selectedTagFilters" class="min-w-0 flex-1" :tags="distinctTags" />
+      <div
+        v-show="galleryTab !== 'trash'"
+        class="mb-4 flex flex-wrap items-end justify-between gap-4"
+      >
+        <GalleryTagFilter
+          v-model="selectedTagFilters"
+          class="min-w-0 flex-1"
+          :tags="distinctTags"
+        />
         <div class="flex flex-wrap items-center gap-2">
           <template v-if="sessionStore.userId">
             <button
@@ -74,24 +93,20 @@
               type="button"
               class="rounded-lg border border-rose-800 bg-rose-950/40 px-3 py-2 text-sm text-rose-200 hover:bg-rose-950/60 disabled:opacity-50"
               :disabled="deleting"
-              @click="onBulkDeleteConfirm"
+              @click="onBulkSoftDeleteConfirm"
             >
-              删除选中（{{ selectedForVideoIds.length }}）
+              移入回收站（{{ selectedForVideoIds.length }}）
             </button>
           </template>
           <GenerateVideoControl
-          :selected-images="selectedVideoImages"
-          @update:video-order="onWizardVideoOrder"
-        />
+            :selected-images="selectedVideoImages"
+            @update:video-order="onWizardVideoOrder"
+          />
         </div>
       </div>
 
       <div v-if="loading" class="text-slate-400">加载中…</div>
-      <div
-        v-else
-        class="columns-1 gap-4 sm:columns-2 lg:columns-3"
-        style="column-fill: balance"
-      >
+      <div v-else class="columns-1 gap-4 sm:columns-2 lg:columns-3" style="column-fill: balance">
         <GalleryImageCard
           v-for="img in images"
           :key="img.id"
@@ -100,11 +115,14 @@
           :liked-by-me="Boolean(likedByMeMap[img.id])"
           :video-selected="selectedForVideoIds.includes(img.id)"
           :is-owner="Boolean(sessionStore.userId && sessionStore.userId === img.user_id)"
+          :in-trash="galleryTab === 'trash'"
           :deleting="deleting"
           @toggle-like="onToggleLike"
           @toggle-video-select="toggleVideoSelect"
           @edit-tags="openTagEditor"
-          @delete-image="onDeleteOneImage"
+          @delete-image="onSoftDeleteOneImage"
+          @restore-image="onRestoreOneImage"
+          @purge-image="onPurgeOneImage"
         />
       </div>
       <p v-if="!loading && !images.length" class="text-slate-500">
@@ -122,7 +140,7 @@
 </template>
 
 <script setup lang="ts">
-import { computed, onMounted, ref, watch } from 'vue';
+import { computed, onBeforeUnmount, onMounted, ref, watch } from 'vue';
 import { toast } from 'vue-sonner';
 import GalleryImageCard from '@/components/gallery-image-card.vue';
 import GalleryTagFilter from '@/components/gallery-tag-filter.vue';
@@ -134,8 +152,12 @@ import { getWriterUserId, supabase } from '@/lib/supabase';
 import {
   GALLERY_CATEGORY_COLLAGE,
   GALLERY_CATEGORY_SINGLE,
-  GALLERY_DELETE_BATCH_CONFIRM,
-  GALLERY_DELETE_ONE_CONFIRM,
+  GALLERY_PURGE_ONE_CONFIRM,
+  GALLERY_PURGE_TRASH_CONFIRM,
+  GALLERY_RESTORE_ONE_CONFIRM,
+  GALLERY_SOFT_DELETE_BATCH_CONFIRM,
+  GALLERY_SOFT_DELETE_ONE_CONFIRM,
+  GALLERY_TAG_FILTER_DEBOUNCE_MS,
   STORAGE_BUCKET,
 } from '@/data';
 import type { ImageRow } from '@/types/database';
@@ -148,13 +170,22 @@ import {
 } from '@/utils/image-compress';
 import { mergeUniqueTagGroups, parseTagsInput } from '@/utils/parse-tags';
 
-type GalleryTab = 'all' | 'single' | 'collage';
+type GalleryTab = 'all' | 'single' | 'collage' | 'trash';
 
-const galleryTabs: { value: GalleryTab; label: string }[] = [
+const galleryTabsBase: { value: GalleryTab; label: string }[] = [
   { value: 'all', label: '全部' },
   { value: 'single', label: '单图' },
   { value: 'collage', label: '拼图' },
 ];
+
+const galleryTabsVisible = computed(function galleryTabsVisibleComputed() {
+  const uid = sessionStore.userId;
+  const out = galleryTabsBase.slice();
+  if (uid) {
+    out.push({ value: 'trash', label: '回收站' });
+  }
+  return out;
+});
 
 const images = ref<ImageRow[]>([]);
 const loading = ref(true);
@@ -177,6 +208,9 @@ function isCollageItem(img: ImageRow): boolean {
 }
 
 const emptyHint = computed(function emptyHintComputed() {
+  if (galleryTab.value === 'trash') {
+    return '回收站为空。';
+  }
   if (galleryTab.value === 'single') {
     return '暂无单图素材，请先上传。';
   }
@@ -249,7 +283,7 @@ function toggleVideoSelect(img: ImageRow) {
   }
 }
 
-function onDeleteOneImage(img: ImageRow) {
+function onSoftDeleteOneImage(img: ImageRow) {
   if (deleting.value) {
     return;
   }
@@ -258,26 +292,142 @@ function onDeleteOneImage(img: ImageRow) {
     return;
   }
   const label = (img.title || '未命名').trim() || '未命名';
-  const msg = GALLERY_DELETE_ONE_CONFIRM.replace('{title}', label);
+  const msg = GALLERY_SOFT_DELETE_ONE_CONFIRM.replace('{title}', label);
   if (!window.confirm(msg)) {
     return;
   }
-  void runDeleteImages([img.id]);
+  void runSoftDeleteImages([img.id]);
 }
 
-function onBulkDeleteConfirm() {
+function onRestoreOneImage(img: ImageRow) {
+  if (deleting.value) {
+    return;
+  }
+  const uid = sessionStore.userId;
+  if (!uid || img.user_id !== uid) {
+    return;
+  }
+  const label = (img.title || '未命名').trim() || '未命名';
+  const msg = GALLERY_RESTORE_ONE_CONFIRM.replace('{title}', label);
+  if (!window.confirm(msg)) {
+    return;
+  }
+  void runRestoreImages([img.id]);
+}
+
+function onPurgeOneImage(img: ImageRow) {
+  if (deleting.value) {
+    return;
+  }
+  const uid = sessionStore.userId;
+  if (!uid || img.user_id !== uid) {
+    return;
+  }
+  const label = (img.title || '未命名').trim() || '未命名';
+  const msg = GALLERY_PURGE_ONE_CONFIRM.replace('{title}', label);
+  if (!window.confirm(msg)) {
+    return;
+  }
+  void runPurgeImages([img.id]);
+}
+
+function onBulkSoftDeleteConfirm() {
   const ids = selectedForVideoIds.value.slice();
   if (!ids.length || deleting.value) {
     return;
   }
-  const msg = GALLERY_DELETE_BATCH_CONFIRM.replace('{n}', String(ids.length));
+  const msg = GALLERY_SOFT_DELETE_BATCH_CONFIRM.replace('{n}', String(ids.length));
   if (!window.confirm(msg)) {
     return;
   }
-  void runDeleteImages(ids);
+  void runSoftDeleteImages(ids);
 }
 
-async function runDeleteImages(ids: string[]) {
+function onEmptyTrashConfirm() {
+  const uid = sessionStore.userId;
+  if (!uid || deleting.value || galleryTab.value !== 'trash') {
+    return;
+  }
+  const rows = images.value.filter(function ownedTrash(r) {
+    return r.user_id === uid && Boolean(r.deleted_at);
+  });
+  if (!rows.length) {
+    return;
+  }
+  const msg = GALLERY_PURGE_TRASH_CONFIRM.replace('{n}', String(rows.length));
+  if (!window.confirm(msg)) {
+    return;
+  }
+  void runPurgeImages(
+    rows.map(function rowIdOnly(r) {
+      return r.id;
+    })
+  );
+}
+
+async function runSoftDeleteImages(ids: string[]) {
+  const uid = sessionStore.userId;
+  if (!uid || !ids.length || deleting.value) {
+    return;
+  }
+  const idSet = new Set(ids);
+  const rows = images.value.filter(function rowOwned(r) {
+    return idSet.has(r.id) && r.user_id === uid;
+  });
+  if (!rows.length) {
+    return;
+  }
+  const ownedIds = rows.map(function rowId(r) {
+    return r.id;
+  });
+  const ts = new Date().toISOString();
+  deleting.value = true;
+  const { error } = await supabase
+    .from('images')
+    .update(Object.assign({}, { deleted_at: ts }))
+    .in('id', ownedIds)
+    .eq('user_id', uid);
+  if (error) {
+    console.error('[gallery] soft delete images', error);
+    toast.error(error.message || '移入回收站失败');
+    deleting.value = false;
+    return;
+  }
+  selectedForVideoIds.value = selectedForVideoIds.value.filter(function keepVid(id) {
+    return !idSet.has(id);
+  });
+  bulkDeleteMode.value = false;
+  deleting.value = false;
+  toast.success(ownedIds.length === 1 ? '已移入回收站' : `已移入回收站 ${ownedIds.length} 张`);
+  void loadDistinctTags();
+  void loadImages();
+}
+
+async function runRestoreImages(ids: string[]) {
+  const uid = sessionStore.userId;
+  if (!uid || !ids.length || deleting.value) {
+    return;
+  }
+  const idSet = new Set(ids);
+  deleting.value = true;
+  const { error } = await supabase
+    .from('images')
+    .update(Object.assign({}, { deleted_at: null }))
+    .in('id', [...idSet])
+    .eq('user_id', uid);
+  if (error) {
+    console.error('[gallery] restore images', error);
+    toast.error(error.message || '恢复失败');
+    deleting.value = false;
+    return;
+  }
+  deleting.value = false;
+  toast.success(ids.length === 1 ? '已恢复' : `已恢复 ${ids.length} 张`);
+  void loadDistinctTags();
+  void loadImages();
+}
+
+async function runPurgeImages(ids: string[]) {
   const uid = sessionStore.userId;
   if (!uid || !ids.length || deleting.value) {
     return;
@@ -298,11 +448,7 @@ async function runDeleteImages(ids: string[]) {
     })
     .filter(Boolean);
   deleting.value = true;
-  const { error } = await supabase
-    .from('images')
-    .delete()
-    .in('id', ownedIds)
-    .eq('user_id', uid);
+  const { error } = await supabase.from('images').delete().in('id', ownedIds).eq('user_id', uid);
   if (error) {
     console.error('[gallery] delete images', error);
     toast.error(error.message || '删除失败');
@@ -332,8 +478,9 @@ async function runDeleteImages(ids: string[]) {
   }
   likedByMeMap.value = nextLiked;
   deleting.value = false;
-  toast.success(ownedIds.length === 1 ? '已删除' : `已删除 ${ownedIds.length} 张`);
+  toast.success(ownedIds.length === 1 ? '已彻底删除' : `已彻底删除 ${ownedIds.length} 张`);
   void loadDistinctTags();
+  void loadImages();
 }
 
 function openTagEditor(img: ImageRow) {
@@ -393,19 +540,30 @@ async function loadDistinctTags() {
 async function loadImages() {
   loading.value = true;
   try {
+    const uid = sessionStore.userId;
     let q = supabase.from('images').select('*').order('created_at', { ascending: false });
-    if (galleryTab.value === 'single') {
-      q = q.eq('gallery_category', GALLERY_CATEGORY_SINGLE);
-    } else if (galleryTab.value === 'collage') {
-      q = q.eq('gallery_category', GALLERY_CATEGORY_COLLAGE);
-    }
-    const tagList = selectedTagFilters.value
-      .map(function trimTag(t) {
-        return t.trim();
-      })
-      .filter(Boolean);
-    if (tagList.length) {
-      q = q.contains('tags', tagList);
+    if (galleryTab.value === 'trash') {
+      if (!uid) {
+        images.value = [];
+        likedByMeMap.value = {};
+        return;
+      }
+      q = q.not('deleted_at', 'is', null).eq('user_id', uid);
+    } else {
+      q = q.is('deleted_at', null);
+      if (galleryTab.value === 'single') {
+        q = q.eq('gallery_category', GALLERY_CATEGORY_SINGLE);
+      } else if (galleryTab.value === 'collage') {
+        q = q.eq('gallery_category', GALLERY_CATEGORY_COLLAGE);
+      }
+      const tagList = selectedTagFilters.value
+        .map(function trimTag(t) {
+          return t.trim();
+        })
+        .filter(Boolean);
+      if (tagList.length) {
+        q = q.contains('tags', tagList);
+      }
     }
     const { data, error } = await q;
     if (error) {
@@ -566,7 +724,9 @@ async function onPickFile(ev: Event) {
 
     if (ok > 0) {
       uploadTagsRaw.value = '';
-      toast.success(ok === files.length ? `已上传 ${ok} 张（单图）` : `已上传 ${ok}/${files.length} 张`);
+      toast.success(
+        ok === files.length ? `已上传 ${ok} 张（单图）` : `已上传 ${ok}/${files.length} 张`
+      );
       await loadDistinctTags();
       await loadImages();
     }
@@ -581,14 +741,26 @@ async function onPickFile(ev: Event) {
   }
 }
 
-watch(galleryTab, function onTabChange() {
-  loadImages();
+let tagFilterDebounceTimer = 0;
+
+watch(galleryTab, function onTabChange(tab) {
+  if (tab === 'trash') {
+    selectedForVideoIds.value = [];
+    bulkDeleteMode.value = false;
+  }
+  void loadImages();
 });
 
 watch(
   selectedTagFilters,
   function onTagFilterChange() {
-    loadImages();
+    if (tagFilterDebounceTimer) {
+      window.clearTimeout(tagFilterDebounceTimer);
+    }
+    tagFilterDebounceTimer = window.setTimeout(function runTagFilterLoad() {
+      tagFilterDebounceTimer = 0;
+      void loadImages();
+    }, GALLERY_TAG_FILTER_DEBOUNCE_MS);
   },
   { deep: true }
 );
@@ -597,11 +769,21 @@ watch(
   function sessionUserId() {
     return sessionStore.userId;
   },
-  function onSessionUserChange() {
+  function onSessionUserChange(uid) {
     pruneVideoSelection();
     bulkDeleteMode.value = false;
+    if (!uid && galleryTab.value === 'trash') {
+      galleryTab.value = 'all';
+    }
   }
 );
+
+onBeforeUnmount(function galleryUnmount() {
+  if (tagFilterDebounceTimer) {
+    window.clearTimeout(tagFilterDebounceTimer);
+    tagFilterDebounceTimer = 0;
+  }
+});
 
 onMounted(function galleryMounted() {
   void Promise.all([loadDistinctTags(), loadImages()]);

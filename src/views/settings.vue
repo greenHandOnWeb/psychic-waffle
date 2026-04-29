@@ -3,22 +3,23 @@
     <div>
       <h1 class="text-xl font-semibold text-white">设置</h1>
       <p class="mt-2 text-sm leading-relaxed text-slate-400">
-        此处为<strong class="text-slate-300">可选运行时配置</strong>，保存在本机浏览器（localStorage）。填写后会<strong
-          class="text-slate-300"
-          >优先于</strong
-        >
-        构建时 <code class="text-slate-300">.env</code> 中的同名变量；留空则仍使用 .env 或项目内置默认（如
-        <code class="text-slate-300">/templates-catalog.json</code>）。
+        此处为<strong class="text-slate-300">可选运行时配置</strong
+        >，保存在本机浏览器（localStorage）。填写后会<strong class="text-slate-300">优先于</strong>
+        构建时 <code class="text-slate-300">.env</code> 中的同名变量；留空则仍使用 .env
+        或项目内置默认（如 <code class="text-slate-300">/templates-catalog.json</code>）。
       </p>
       <p class="mt-2 text-xs text-amber-200/90">
-        Pixabay Key 属于私密信息，勿在公共电脑勾选「记住」类浏览器同步；团队生产环境仍建议用 CI 注入 .env。
+        Pixabay Key 属于私密信息，勿在公共电脑勾选「记住」类浏览器同步；团队生产环境仍建议用 CI 注入
+        .env。
       </p>
     </div>
 
     <section class="rounded-xl border border-slate-800 bg-slate-900/60 p-6">
       <h2 class="text-lg font-medium text-white">Supabase / Mock 模式</h2>
       <p class="mt-1 text-xs text-slate-500">
-        选项保存在本机 <code class="text-slate-400">localStorage</code>（与下方运行时配置同一存储键），可覆盖构建时的
+        选项保存在本机
+        <code class="text-slate-400">localStorage</code
+        >（与下方运行时配置同一存储键），可覆盖构建时的
         <code class="text-slate-400">VITE_SUPABASE_MOCK</code>。切换后将自动刷新页面以重新连接。
       </p>
       <div class="mt-4 space-y-3">
@@ -43,9 +44,25 @@
     </section>
 
     <section class="rounded-xl border border-slate-800 bg-slate-900/60 p-6">
+      <h2 class="text-lg font-medium text-white">安装到设备（类 App）</h2>
+      <p class="mt-1 text-xs text-slate-500">
+        本站已提供 Web Manifest（<code class="text-slate-400">/site.webmanifest</code>）。在
+        <strong class="text-slate-300">Chrome / Edge</strong> 中打开本站后，可通过菜单「
+        <strong class="text-slate-300">安装应用</strong>」或「<strong class="text-slate-300"
+          >添加到主屏幕</strong
+        >」获得桌面图标；国内访问建议将构建产物部署到自有域名（与 Vercel 线路解耦）。
+      </p>
+      <p class="mt-2 text-xs text-slate-500">
+        主屏幕快捷方式已配置「画廊」「拼图编辑」入口（依赖浏览器对 Manifest shortcuts 的支持）。
+      </p>
+    </section>
+
+    <section class="rounded-xl border border-slate-800 bg-slate-900/60 p-6">
       <h2 class="text-lg font-medium text-white">云端模板目录</h2>
       <p class="mt-1 text-xs text-slate-500">
-        须为可 CORS 访问的 JSON 数组 URL。留空则顺序为：<code class="text-slate-400">VITE_TEMPLATES_CATALOG_URL</code>
+        须为可 CORS 访问的 JSON 数组 URL。留空则顺序为：<code class="text-slate-400"
+          >VITE_TEMPLATES_CATALOG_URL</code
+        >
         → 内置 <code class="text-slate-400">/templates-catalog.json</code>。
       </p>
       <input
@@ -81,7 +98,9 @@
       <h2 class="text-lg font-medium text-slate-300">仍依赖 .env 的配置</h2>
       <ul class="mt-2 list-inside list-disc text-sm text-slate-500">
         <li>
-          <code class="text-slate-400">VITE_SUPABASE_URL</code>、<code class="text-slate-400">VITE_SUPABASE_ANON_KEY</code>
+          <code class="text-slate-400">VITE_SUPABASE_URL</code>、<code class="text-slate-400"
+            >VITE_SUPABASE_ANON_KEY</code
+          >
           仅在构建时注入；「强制远端」前请先在 .env 中配置并重启 dev / 重新 build。
         </li>
         <li>数据库与 Storage 权限仍由 Supabase 控制台与迁移 SQL 决定。</li>

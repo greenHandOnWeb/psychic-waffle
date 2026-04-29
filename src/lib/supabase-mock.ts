@@ -84,6 +84,7 @@ function emptySnapshot(): MockDbSnapshot {
 
 function normalizeImageRow(raw: Record<string, unknown>): ImageRow {
   const lc = raw.likes_count;
+  const del = raw.deleted_at;
   return {
     id: raw.id as string,
     user_id: raw.user_id as string,
@@ -94,9 +95,11 @@ function normalizeImageRow(raw: Record<string, unknown>): ImageRow {
     layout: (raw.layout as PuzzleLayout) ?? { elements: [] },
     file_size_bytes: (raw.file_size_bytes as number | null) ?? null,
     is_public: raw.is_public !== false,
+    deleted_at: typeof del === 'string' && del.length ? del : null,
     created_at: (raw.created_at as string) ?? new Date().toISOString(),
     likes_count: typeof lc === 'number' && Number.isFinite(lc) ? lc : 0,
-    gallery_category: (raw.gallery_category as ImageRow['gallery_category']) ?? GALLERY_CATEGORY_SINGLE,
+    gallery_category:
+      (raw.gallery_category as ImageRow['gallery_category']) ?? GALLERY_CATEGORY_SINGLE,
     source_image_id: (raw.source_image_id as string | null) ?? null,
   };
 }
@@ -150,6 +153,9 @@ class MockTableBuilder {
   private filtersEq: Record<string, unknown> = {};
   private filtersContains: Record<string, unknown[]> = {};
   private filtersIn: Record<string, unknown[]> = {};
+  private filtersIs: Record<string, unknown> = {};
+  /** column -> value；value === null 表示 IS NOT NULL（配合 not(column,'is',null)） */
+  private filtersNotIs: Record<string, unknown> = {};
   private orderColumn: string | null = null;
   private orderAsc = true;
   private wantSingle = false;
@@ -200,6 +206,18 @@ class MockTableBuilder {
     return this;
   }
 
+  is(column: string, value: unknown) {
+    this.filtersIs[column] = value;
+    return this;
+  }
+
+  not(column: string, op: string, value: unknown) {
+    if (op === 'is') {
+      this.filtersNotIs[column] = value;
+    }
+    return this;
+  }
+
   order(column: string, options?: { ascending?: boolean }) {
     this.orderColumn = column;
     this.orderAsc = options?.ascending ?? true;
@@ -220,7 +238,12 @@ class MockTableBuilder {
     const eq = this.filtersEq;
     const cs = this.filtersContains;
     const inn = this.filtersIn;
+    const isF = this.filtersIs;
+    const notIsF = this.filtersNotIs;
     return rows.filter(function matchFilters(row) {
+      function cellIsEmpty(v: unknown) {
+        return v == null || v === '';
+      }
       const keysEq = Object.keys(eq);
       for (let i = 0; i < keysEq.length; i++) {
         const key = keysEq[i];
@@ -248,6 +271,30 @@ class MockTableBuilder {
         const allowed = inn[key];
         if (!allowed.includes(row[key])) {
           return false;
+        }
+      }
+      const keysIs = Object.keys(isF);
+      for (let i = 0; i < keysIs.length; i++) {
+        const key = keysIs[i];
+        const want = isF[key];
+        const cell = row[key];
+        if (want === null) {
+          if (!cellIsEmpty(cell)) {
+            return false;
+          }
+        } else if (cell !== want) {
+          return false;
+        }
+      }
+      const keysNotIs = Object.keys(notIsF);
+      for (let i = 0; i < keysNotIs.length; i++) {
+        const key = keysNotIs[i];
+        const want = notIsF[key];
+        const cell = row[key];
+        if (want === null) {
+          if (cellIsEmpty(cell)) {
+            return false;
+          }
         }
       }
       return true;
@@ -350,6 +397,7 @@ class MockTableBuilder {
           layout: (raw.layout as PuzzleLayout) ?? { elements: [] },
           file_size_bytes: raw.file_size_bytes ?? null,
           is_public: raw.is_public ?? true,
+          deleted_at: null,
           created_at: raw.created_at ?? new Date().toISOString(),
           likes_count: 0,
           gallery_category: raw.gallery_category ?? GALLERY_CATEGORY_SINGLE,
@@ -366,22 +414,35 @@ class MockTableBuilder {
     }
     if (this.operation === 'update') {
       const patch = this.payload[0] as Partial<ImageRow>;
-      const id = this.filtersEq.id as string | undefined;
-      if (!id) {
-        return err('update images 需要 eq id');
-      }
-      const idx = snapshot.images.findIndex(function byId(img) {
-        return img.id === id;
-      });
-      if (idx < 0) {
-        return err('记录不存在', 'PGRST116');
-      }
-      Object.assign(snapshot.images[idx], patch);
-      persistSnapshot(snapshot);
-      if (this.wantSingle) {
+      const idSingle = this.filtersEq.id as string | undefined;
+      const idList = this.filtersIn.id as string[] | undefined;
+      const uid = this.filtersEq.user_id as string | undefined;
+      if (idSingle) {
+        const idx = snapshot.images.findIndex(function byId(img) {
+          return img.id === idSingle;
+        });
+        if (idx < 0) {
+          return err('记录不存在', 'PGRST116');
+        }
+        Object.assign(snapshot.images[idx], patch);
+        persistSnapshot(snapshot);
+        if (this.wantSingle) {
+          return ok(snapshot.images[idx]);
+        }
         return ok(snapshot.images[idx]);
       }
-      return ok(snapshot.images[idx]);
+      if (idList?.length && uid) {
+        const idSet = new Set(idList);
+        for (let i = 0; i < snapshot.images.length; i++) {
+          const img = snapshot.images[i];
+          if (idSet.has(img.id) && img.user_id === uid) {
+            snapshot.images[i] = Object.assign({}, img, patch);
+          }
+        }
+        persistSnapshot(snapshot);
+        return ok(null);
+      }
+      return err('update images 需要 eq id，或 in("id") 与 eq("user_id")');
     }
     if (this.operation === 'delete') {
       const ids = this.filtersIn.id as string[] | undefined;
@@ -551,7 +612,7 @@ async function executeMockRpc(
     const set = new Set<string>();
     for (let i = 0; i < snapshot.images.length; i++) {
       const img = snapshot.images[i];
-      if (img.is_public !== false) {
+      if (img.is_public !== false && !img.deleted_at) {
         const tags = img.tags ?? [];
         for (let j = 0; j < tags.length; j++) {
           const t = String(tags[j]).trim();
@@ -580,7 +641,7 @@ async function executeMockRpc(
     if (imgIdx < 0) {
       return err('图片不存在');
     }
-    if (snapshot.images[imgIdx].is_public === false) {
+    if (snapshot.images[imgIdx].is_public === false || snapshot.images[imgIdx].deleted_at) {
       return err('图片不可访问');
     }
     const likeIdx = snapshot.likes.findIndex(function findLikeRow(l) {

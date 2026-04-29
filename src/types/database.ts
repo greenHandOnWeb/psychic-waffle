@@ -74,6 +74,8 @@ export interface ImageRow {
   layout: PuzzleLayout;
   file_size_bytes: number | null;
   is_public: boolean;
+  /** 非空表示在回收站（软删除），恢复时置空 */
+  deleted_at?: string | null;
   created_at: string;
   /** 点赞数（由 likes 表 / 触发器或 Mock 同步） */
   likes_count?: number;
